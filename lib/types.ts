@@ -60,3 +60,15 @@ export const MARKER_LABELS: Record<MarkerType, string> = {
   outro: 'Outro',
   custom: 'Personalizado',
 };
+
+/**
+ * Descripciones educativas para cada tipo de marcador
+ * Ayudan a DJs principiantes a entender la estructura de la música
+ */
+export const MARKER_HELP: Record<MarkerType, string> = {
+  intro: 'Parte inicial de la canción. Suele tener 8-16 compases sin voz. Ideal para empezar a mezclar.',
+  buildup: 'Momento donde la tensión aumenta progresivamente. Subidas de energía, efectos de filtro, drum rolls. Prepara la transición.',
+  drop: 'El momento más energético.usually con voz, bass fuerte y melodías principales. El "climax" de la canción.',
+  outro: 'Final de la canción. Generalmente 8-16 compases. Útil para mixes largos oTransiciones suaves.',
+  custom: 'Cualquier momento especial que quieras recordar: cambio de sección, sample, efecto, etc.',
+};

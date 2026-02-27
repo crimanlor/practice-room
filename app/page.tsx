@@ -7,6 +7,7 @@ import { FileUpload } from '@/components/FileUpload';
 import { TrackList } from '@/components/TrackList';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MarkerList } from '@/components/MarkerList';
+import { LearningPanel, LearningButton } from '@/components/LearningPanel';
 import { Track, Marker, MarkerType } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { Music2 } from 'lucide-react';
@@ -31,6 +32,8 @@ export default function Home() {
 
   const [currentTime, setCurrentTime] = useState(0);
   const [seekFn, setSeekFn] = useState<((time: number) => void) | null>(null);
+  const [showLearningPanel, setShowLearningPanel] = useState(false);
+  const [learningExpanded, setLearningExpanded] = useState(false);
 
   // Callback para obtener la función seek del player
   const handleSeekAvailable = (seekFunction: (time: number) => void) => {
@@ -102,15 +105,26 @@ export default function Home() {
       {/* Header */}
       <header className="border-b border-slate-700 bg-slate-900/50 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-6">
-          <div className="flex items-center gap-3">
-            <Music2 className="text-primary-400" size={32} />
-            <div>
-              <h1 className="text-2xl font-bold text-white">Practice Room</h1>
-              <p className="text-slate-400 text-sm">Aprende a pinchar música</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Music2 className="text-primary-400" size={32} />
+              <div>
+                <h1 className="text-2xl font-bold text-white">Practice Room</h1>
+                <p className="text-slate-400 text-sm">Aprende a pinchar música</p>
+              </div>
             </div>
+            <LearningButton onClick={() => setShowLearningPanel(true)} />
           </div>
         </div>
       </header>
+
+      {/* Learning Panel */}
+      <LearningPanel 
+        isOpen={showLearningPanel} 
+        onClose={() => setShowLearningPanel(false)}
+        isExpanded={learningExpanded}
+        onExpand={() => setLearningExpanded(!learningExpanded)}
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

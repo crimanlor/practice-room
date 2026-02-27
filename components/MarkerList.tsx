@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, X, Edit2 } from 'lucide-react';
-import { MarkerType, MARKER_LABELS, Marker, MARKER_COLORS } from '@/lib/types';
+import { MarkerType, MARKER_LABELS, MARKER_HELP, Marker, MARKER_COLORS } from '@/lib/types';
 import { formatTime } from '@/lib/utils';
 
 interface AddMarkerFormProps {
@@ -54,6 +54,18 @@ export const AddMarkerForm = ({ currentTime, onAdd, isVisible, onClose }: AddMar
               </button>
             ))}
           </div>
+          <motion.div
+            key={markerType}
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="mt-3 p-3 bg-slate-800/50 rounded-lg border-l-4"
+            style={{ borderColor: MARKER_COLORS[markerType] }}
+          >
+            <p className="text-xs text-slate-300 leading-relaxed">
+              <span className="font-semibold text-white">{MARKER_LABELS[markerType]}:</span>{' '}
+              {MARKER_HELP[markerType]}
+            </p>
+          </motion.div>
         </div>
 
         <div>
@@ -150,6 +162,18 @@ const EditMarkerForm = ({ marker, onSave, onClose }: EditMarkerFormProps) => {
                 </button>
               ))}
             </div>
+            <motion.div
+              key={markerType}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mt-3 p-3 bg-slate-700/50 rounded-lg border-l-4"
+              style={{ borderColor: MARKER_COLORS[markerType] }}
+            >
+              <p className="text-xs text-slate-300 leading-relaxed">
+                <span className="font-semibold text-white">{MARKER_LABELS[markerType]}:</span>{' '}
+                {MARKER_HELP[markerType]}
+              </p>
+            </motion.div>
           </div>
 
           <div>

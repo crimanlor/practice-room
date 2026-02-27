@@ -1,0 +1,236 @@
+'use client';
+
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { ChevronDown, ChevronRight, X, BookOpen, Maximize2, Minimize2 } from 'lucide-react';
+import { LEARNING_CONTENT, LearningSection } from '@/lib/learningContent';
+
+interface LearningPanelProps {
+  isOpen: boolean;
+  onClose: () => void;
+  isExpanded?: boolean;
+  onExpand?: () => void;
+}
+
+const SectionContent = ({ section, isExpanded }: { section: LearningSection; isExpanded?: boolean }) => {
+  const [isExpandedSection, setIsExpandedSection] = useState(false);
+  const containerClass = isExpanded 
+    ? "grid grid-cols-1 md:grid-cols-2 gap-6" 
+    : "space-y-4";
+
+  return (
+    <div className={containerClass}>
+      {section.content.map((item, index) => (
+        <div 
+          key={index} 
+          className={`bg-slate-800/50 rounded-lg p-4 ${isExpanded ? 'h-fit' : ''}`}
+        >
+          <h4 className="font-semibold text-primary-400 text-sm mb-2">
+            {item.subtitle}
+          </h4>
+          <p className="text-slate-300 text-sm leading-relaxed mb-3">
+            {item.description}
+          </p>
+          {item.tips && item.tips.length > 0 && (
+            <ul className="space-y-1.5">
+              {item.tips.map((tip, tipIndex) => (
+                <li key={tipIndex} className="text-slate-400 text-xs flex items-start gap-2">
+                  <span className="text-primary-500 mt-0.5">•</span>
+                  <span>{tip}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
+
+const SectionItem = ({ section, isExpanded }: { section: LearningSection; isExpanded?: boolean }) => {
+  const [isExpandedSection, setIsExpandedSection] = useState(false);
+
+  if (isExpanded) {
+    return (
+      <div className="border-b border-slate-700/50">
+        <button
+          onClick={() => setIsExpandedSection(!isExpandedSection)}
+          className="w-full flex items-center justify-between p-6 text-left hover:bg-slate-800/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{section.icon}</span>
+            <h3 className="text-xl font-bold text-white">{section.title}</h3>
+          </div>
+          {isExpandedSection ? (
+            <ChevronDown size={24} className="text-slate-400" />
+          ) : (
+            <ChevronRight size={24} className="text-slate-400" />
+          )}
+        </button>
+
+        <AnimatePresence>
+          {isExpandedSection && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: 'auto', opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="overflow-hidden"
+            >
+              <div className="px-6 pb-6 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {section.content.map((item, index) => (
+                    <div 
+                      key={index} 
+                      className="bg-slate-800/50 rounded-lg p-4"
+                    >
+                      <h4 className="font-semibold text-primary-400 text-sm mb-2">
+                        {item.subtitle}
+                      </h4>
+                      <p className="text-slate-300 text-sm leading-relaxed mb-3">
+                        {item.description}
+                      </p>
+                      {item.tips && item.tips.length > 0 && (
+                        <ul className="space-y-1.5">
+                          {item.tips.map((tip, tipIndex) => (
+                            <li key={tipIndex} className="text-slate-400 text-xs flex items-start gap-2">
+                              <span className="text-primary-500 mt-0.5">•</span>
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  return (
+    <div className="border-b border-slate-700 last:border-0">
+      <button
+        onClick={() => setIsExpandedSection(!isExpandedSection)}
+        className="w-full flex items-center justify-between p-4 text-left hover:bg-slate-700/50 transition-colors"
+      >
+        <span className="flex items-center gap-3">
+          <span className="text-xl">{section.icon}</span>
+          <span className="font-medium text-white">{section.title}</span>
+        </span>
+        {isExpandedSection ? (
+          <ChevronDown size={18} className="text-slate-400" />
+        ) : (
+          <ChevronRight size={18} className="text-slate-400" />
+        )}
+      </button>
+
+      <AnimatePresence>
+        {isExpandedSection && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 pb-4 pt-2">
+              <SectionContent section={section} />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+export const LearningPanel = ({ isOpen, onClose, isExpanded, onExpand }: LearningPanelProps) => {
+  if (!isOpen) return null;
+
+  const panelClass = isExpanded
+    ? "fixed inset-0 bg-slate-900 z-50 flex flex-col"
+    : "fixed right-0 top-0 h-full w-full max-w-md bg-slate-900 border-l border-slate-700 shadow-2xl z-50 flex flex-col";
+
+  return (
+    <motion.div
+      initial={isExpanded ? { opacity: 0 } : { x: '100%' }}
+      animate={isExpanded ? { opacity: 1 } : { x: 0 }}
+      exit={isExpanded ? { opacity: 0 } : { x: '100%' }}
+      transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+      className={panelClass}
+    >
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b border-slate-700 bg-slate-800/50">
+        <div className="flex items-center gap-3">
+          <BookOpen className="text-primary-400" size={24} />
+          <div>
+            <h2 className="text-lg font-bold text-white">Aprende a Mezclar</h2>
+            <p className="text-xs text-slate-400">Guía para DJs principiantes</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {onExpand && (
+            <button
+              onClick={onExpand}
+              className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+              title={isExpanded ? "Vista reducida" : "Expandir a pantalla completa"}
+            >
+              {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-700 rounded-lg transition-colors"
+          >
+            <X size={20} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className={`flex-1 overflow-y-auto ${isExpanded ? 'p-6' : ''}`}>
+        {isExpanded ? (
+          <div className="max-w-5xl mx-auto">
+            <div className="mb-8">
+              <h1 className="text-3xl font-bold text-white mb-2">Guía Completa de DJ</h1>
+              <p className="text-slate-400">Todo lo que necesitas saber para aprender a mezclar música electrónica</p>
+            </div>
+            {LEARNING_CONTENT.map((section) => (
+              <SectionItem key={section.id} section={section} isExpanded={isExpanded} />
+            ))}
+          </div>
+        ) : (
+          LEARNING_CONTENT.map((section) => (
+            <SectionItem key={section.id} section={section} />
+          ))
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="p-4 border-t border-slate-700 bg-slate-800/30">
+        <p className="text-xs text-slate-500 text-center">
+          💡 Consejo: Usa los marcadores para marcar las secciones de cada canción y practicar transiciones.
+        </p>
+      </div>
+    </motion.div>
+  );
+};
+
+interface LearningButtonProps {
+  onClick: () => void;
+}
+
+export const LearningButton = ({ onClick }: LearningButtonProps) => (
+  <button
+    onClick={onClick}
+    className="flex items-center gap-2 bg-primary-500/10 hover:bg-primary-500/20 
+               border border-primary-500/30 text-primary-400 px-4 py-2 rounded-lg 
+               text-sm font-medium transition-colors"
+  >
+    <BookOpen size={18} />
+    Aprende a mezclar
+  </button>
+);
