@@ -7,7 +7,7 @@ import { FileUpload } from '@/components/FileUpload';
 import { TrackList } from '@/components/TrackList';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MarkerList } from '@/components/MarkerList';
-import { Track, MarkerType } from '@/lib/types';
+import { Track, Marker, MarkerType } from '@/lib/types';
 import { motion } from 'framer-motion';
 import { Music2 } from 'lucide-react';
 
@@ -30,6 +30,12 @@ export default function Home() {
   } = useMarkers(currentTrack?.markers || []);
 
   const [currentTime, setCurrentTime] = useState(0);
+  const [seekFn, setSeekFn] = useState<((time: number) => void) | null>(null);
+
+  // Callback para obtener la función seek del player
+  const handleSeekAvailable = (seekFunction: (time: number) => void) => {
+    setSeekFn(() => seekFunction);
+  };
 
   // Actualizar marcadores cuando cambia el track
   const handleTrackSelect = (id: string) => {
@@ -52,6 +58,26 @@ export default function Home() {
     }
   };
 
+  // Actualizar marcador existente
+  const handleUpdateMarker = (id: string, updates: Partial<Marker>) => {
+    updateMarker(id, updates);
+    if (currentTrack) {
+      const updatedMarkers = markers.map(m => 
+        m.id === id ? { ...m, ...updates } : m
+      );
+      const updatedTrack: Track = {
+        ...currentTrack,
+        markers: updatedMarkers,
+      };
+      updateTrack(updatedTrack);
+    }
+  };
+
+  // Wrapper para edición de marcador (transforma objeto Marker en id + updates)
+  const handleEditMarker = (marker: Marker) => {
+    handleUpdateMarker(marker.id, { type: marker.type, note: marker.note });
+  };
+
   // Eliminar marcador y actualizar track
   const handleDeleteMarker = (id: string) => {
     deleteMarker(id);
@@ -66,7 +92,9 @@ export default function Home() {
 
   const handleSeekTo = (time: number) => {
     setCurrentTime(time);
-    // La funcionalidad de seek se maneja en el AudioPlayer
+    if (seekFn) {
+      seekFn(time);
+    }
   };
 
   return (
@@ -123,6 +151,7 @@ export default function Home() {
                   <AudioPlayer
                     track={currentTrack}
                     onTimeUpdate={setCurrentTime}
+                    onSeek={handleSeekAvailable}
                   />
                 </motion.div>
 
@@ -134,7 +163,7 @@ export default function Home() {
                   <MarkerList
                     markers={markers}
                     onDelete={handleDeleteMarker}
-                    onEdit={updateMarker}
+                    onEdit={handleEditMarker}
                     onSeek={handleSeekTo}
                     currentTime={currentTime}
                     onAddMarker={handleAddMarker}

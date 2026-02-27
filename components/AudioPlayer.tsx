@@ -5,19 +5,20 @@ import { Track } from '@/lib/types';
 import { formatTime } from '@/lib/utils';
 import { motion } from 'framer-motion';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface AudioPlayerProps {
   track: Track;
   onReady?: (duration: number) => void;
   onTimeUpdate?: (time: number) => void;
+  onSeek?: (seekFn: (time: number) => void) => void;
 }
 
 /**
  * Componente principal del reproductor de audio
  * Integra WaveSurfer para visualización y controles de reproducción
  */
-export const AudioPlayer = ({ track, onReady, onTimeUpdate }: AudioPlayerProps) => {
+export const AudioPlayer = ({ track, onReady, onTimeUpdate, onSeek }: AudioPlayerProps) => {
   const { 
     waveformRef, 
     playerState, 
@@ -25,6 +26,7 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate }: AudioPlayerProps) 
     error,
     togglePlayPause, 
     setVolume,
+    seekTo,
   } = useAudioPlayer({ 
     audioUrl: track.file_url,
     onReady,
@@ -32,10 +34,19 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate }: AudioPlayerProps) 
 
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Notificar cambios de tiempo
-  if (onTimeUpdate && playerState.currentTime) {
-    onTimeUpdate(playerState.currentTime);
-  }
+  // Exponer función seek al padre
+  useEffect(() => {
+    if (onSeek) {
+      onSeek(seekTo);
+    }
+  }, [onSeek, seekTo]);
+
+  // Notificar cambios de tiempo al padre
+  useEffect(() => {
+    if (onTimeUpdate) {
+      onTimeUpdate(playerState.currentTime);
+    }
+  }, [playerState.currentTime, onTimeUpdate]);
 
   return (
     <div className="bg-slate-800 rounded-lg p-6 shadow-xl">
@@ -112,7 +123,6 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate }: AudioPlayerProps) 
                 value={playerState.volume * 100}
                 onChange={(e) => setVolume(Number(e.target.value) / 100)}
                 className="w-24 h-1 accent-primary-500 cursor-pointer"
-                style={{ writingMode: 'bt-lr', WebkitAppearance: 'slider-vertical' }}
               />
             </motion.div>
           )}
