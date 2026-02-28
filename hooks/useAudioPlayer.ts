@@ -1,107 +1,95 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
-import { PlayerState } from '@/lib/types';
-import { getAudioFile } from '@/lib/audioStorage';
+import type { PlayerState } from '@/types';
+import { getAudioFile } from '@/services/audioService';
 
-interface UseAudioPlayerProps {
+interface UseAudioPlayerOptions {
   audioUrl?: string;
   onReady?: (duration: number) => void;
 }
 
-const THROTTLE_MS = 100;
+/** Tiempo mínimo (ms) entre actualizaciones de currentTime para limitar re-renders. */
+const TIME_UPDATE_THROTTLE_MS = 100;
 
-export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) => {
+const DIRECT_URL_PREFIXES = ['blob:', 'http:', 'https:', 'data:'];
+
+function isDirectUrl(url: string): boolean {
+  return DIRECT_URL_PREFIXES.some((prefix) => url.startsWith(prefix));
+}
+
+export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}) {
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const onReadyRef = useRef(onReady);
   const currentBlobUrlRef = useRef<string | null>(null);
   const isInitializedRef = useRef(false);
   const isLoadingRef = useRef(false);
-  
+  const lastTimeUpdateRef = useRef(0);
+
   const [playerState, setPlayerState] = useState<PlayerState>({
     isPlaying: false,
     currentTime: 0,
     duration: 0,
     volume: 1,
   });
-
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const lastTimeUpdateRef = useRef<number>(0);
 
-  // Actualizar ref cuando cambia onReady
+  // Mantener la ref actualizada sin causar re-renders
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
 
-  // Función para cargar audio
   const loadAudio = useCallback(async (url: string) => {
-    if (!wavesurferRef.current) return;
-    
-    const wavesurfer = wavesurferRef.current;
+    const ws = wavesurferRef.current;
+    if (!ws) return;
 
-    // Limpiar blob URL anterior
+    // Revocar blob URL anterior para liberar memoria
     if (currentBlobUrlRef.current) {
       URL.revokeObjectURL(currentBlobUrlRef.current);
       currentBlobUrlRef.current = null;
     }
 
-    try {
-      if (wavesurfer.isPlaying()) {
-        wavesurfer.pause();
-      }
-    } catch (e) {}
+    if (ws.isPlaying()) ws.pause();
 
-    // Indicar que estamos cargando
     isLoadingRef.current = true;
     setIsReady(false);
     setError(null);
 
     try {
-      const isDirectUrl = url.startsWith('blob:') || 
-                         url.startsWith('http:') || 
-                         url.startsWith('https:') ||
-                         url.startsWith('data:');
-      
-      if (isDirectUrl) {
-        await wavesurfer.load(url);
+      if (isDirectUrl(url)) {
+        await ws.load(url);
       } else {
         const blobUrl = await getAudioFile(url);
-        
         if (blobUrl) {
           currentBlobUrlRef.current = blobUrl;
-          await wavesurfer.load(blobUrl);
+          await ws.load(blobUrl);
         } else {
           isLoadingRef.current = false;
           setError('Archivo no encontrado');
-          setIsReady(false);
         }
       }
-    } catch (err: any) {
-      console.error('Error loading audio:', err);
+    } catch (err) {
+      console.error('[useAudioPlayer] Error loading audio:', err);
       isLoadingRef.current = false;
       setError('Error al cargar audio');
-      setIsReady(false);
     }
   }, []);
 
-  // Efecto combinado: inicializar WaveSurfer Y cargar audio cuando esté listo
+  // Inicializar WaveSurfer una sola vez y cargar audio cuando el contenedor esté listo
   useEffect(() => {
-    // Función que intenta inicializar
-    const tryInit = () => {
+    function tryInit() {
       if (isInitializedRef.current) return;
       if (!waveformRef.current) {
-        // Reintentar en el siguiente frame
         requestAnimationFrame(tryInit);
         return;
       }
 
       isInitializedRef.current = true;
 
-      const wavesurfer = WaveSurfer.create({
+      const ws = WaveSurfer.create({
         container: waveformRef.current,
         waveColor: '#94a3b8',
         progressColor: '#0ea5e9',
@@ -114,111 +102,90 @@ export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) 
         backend: 'WebAudio',
       });
 
-      wavesurferRef.current = wavesurfer;
+      wavesurferRef.current = ws;
 
-      // Evento cuando WaveSurfer termina de cargar audio
-      wavesurfer.on('ready', () => {
-        if (isLoadingRef.current) {
-          isLoadingRef.current = false;
-          const duration = wavesurfer.getDuration();
-          setPlayerState(prev => ({ ...prev, duration }));
-          setIsReady(true);
-          setError(null);
-          onReadyRef.current?.(duration);
-        }
+      ws.on('ready', () => {
+        if (!isLoadingRef.current) return;
+        isLoadingRef.current = false;
+        const duration = ws.getDuration();
+        setPlayerState((prev) => ({ ...prev, duration }));
+        setIsReady(true);
+        setError(null);
+        onReadyRef.current?.(duration);
       });
 
-      wavesurfer.on('play', () => {
-        setPlayerState(prev => ({ ...prev, isPlaying: true }));
-      });
+      ws.on('play', () =>
+        setPlayerState((prev) => ({ ...prev, isPlaying: true })),
+      );
+      ws.on('pause', () =>
+        setPlayerState((prev) => ({ ...prev, isPlaying: false })),
+      );
 
-      wavesurfer.on('pause', () => {
-        setPlayerState(prev => ({ ...prev, isPlaying: false }));
-      });
-
-      wavesurfer.on('timeupdate', (currentTime: number) => {
+      ws.on('timeupdate', (currentTime: number) => {
         const now = Date.now();
-        if (now - lastTimeUpdateRef.current > THROTTLE_MS) {
+        if (now - lastTimeUpdateRef.current > TIME_UPDATE_THROTTLE_MS) {
           lastTimeUpdateRef.current = now;
-          setPlayerState(prev => ({ ...prev, currentTime }));
+          setPlayerState((prev) => ({ ...prev, currentTime }));
         }
       });
 
-      wavesurfer.on('finish', () => {
-        setPlayerState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
-      });
+      ws.on('finish', () =>
+        setPlayerState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 })),
+      );
 
-      wavesurfer.on('error', (err: any) => {
-        console.error('WaveSurfer error:', err);
+      ws.on('error', (err: Error) => {
+        console.error('[useAudioPlayer] WaveSurfer error:', err);
         isLoadingRef.current = false;
         setError('Error al cargar el audio');
         setIsReady(false);
       });
 
-      // Si hay una URL de audio, cargarla ahora
       if (audioUrl) {
         isLoadingRef.current = true;
         loadAudio(audioUrl);
       } else {
-        // Sin audio, marcar como listo
         setIsReady(true);
       }
 
-      // Cleanup
       return () => {
-        try {
-          if (wavesurfer.isPlaying()) {
-            wavesurfer.pause();
-          }
-        } catch (e) {}
-        
         setTimeout(() => {
           try {
-            wavesurfer.destroy();
-            wavesurferRef.current = null;
-            isInitializedRef.current = false;
-          } catch (e) {}
+            if (ws.isPlaying()) ws.pause();
+            ws.destroy();
+          } catch {
+            // ignorar errores en cleanup
+          }
+          wavesurferRef.current = null;
+          isInitializedRef.current = false;
         }, 0);
       };
-    };
+    }
 
     tryInit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [audioUrl, loadAudio]);
 
   const togglePlayPause = useCallback(() => {
-    if (!wavesurferRef.current) return;
-    wavesurferRef.current.playPause();
+    wavesurferRef.current?.playPause();
   }, []);
 
   const seekTo = useCallback((time: number) => {
-    if (!wavesurferRef.current) return;
-    const duration = wavesurferRef.current.getDuration();
-    if (duration > 0) {
-      wavesurferRef.current.seekTo(time / duration);
-    }
+    const ws = wavesurferRef.current;
+    if (!ws) return;
+    const duration = ws.getDuration();
+    if (duration > 0) ws.seekTo(time / duration);
   }, []);
 
   const setVolume = useCallback((volume: number) => {
-    if (!wavesurferRef.current) return;
-    const clampedVolume = Math.max(0, Math.min(1, volume));
-    wavesurferRef.current.setVolume(clampedVolume);
-    setPlayerState(prev => ({ ...prev, volume: clampedVolume }));
+    const clamped = Math.max(0, Math.min(1, volume));
+    wavesurferRef.current?.setVolume(clamped);
+    setPlayerState((prev) => ({ ...prev, volume: clamped }));
   }, []);
 
   const stop = useCallback(() => {
-    if (!wavesurferRef.current) return;
-    wavesurferRef.current.stop();
-    setPlayerState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+    wavesurferRef.current?.stop();
+    setPlayerState((prev) => ({ ...prev, isPlaying: false, currentTime: 0 }));
   }, []);
 
-  return {
-    waveformRef,
-    playerState,
-    isReady,
-    error,
-    togglePlayPause,
-    seekTo,
-    setVolume,
-    stop,
-  };
-};
+  return { waveformRef, playerState, isReady, error, togglePlayPause, seekTo, setVolume, stop };
+}

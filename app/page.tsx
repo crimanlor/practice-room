@@ -1,109 +1,45 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
+import { motion } from 'framer-motion';
+import { Music2 } from 'lucide-react';
+
 import { useTracks } from '@/hooks/useTracks';
-import { useMarkers } from '@/hooks/useMarkers';
+import { useTrackMarkers } from '@/hooks/useTrackMarkers';
+import { PlayerProvider, usePlayerContext } from '@/context/PlayerContext';
+
 import { FileUpload } from '@/components/FileUpload';
 import { TrackList } from '@/components/TrackList';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MarkerList } from '@/components/MarkerList';
 import { SongAnalyzer } from '@/components/SongAnalyzer';
 import { LearningPanel, LearningButton } from '@/components/LearningPanel';
-import { Track, Marker, MarkerType } from '@/lib/types';
-import { motion } from 'framer-motion';
-import { Music2 } from 'lucide-react';
 
-export default function Home() {
-  const { 
-    tracks, 
-    currentTrack, 
-    addTrack, 
+import type { Marker, MarkerType, Track } from '@/types';
+
+// ─── Sub-componente interno (ya tiene acceso al context) ──────────────────────
+
+function MainContent() {
+  const { tracks, currentTrack, addTrack, updateTrack, deleteTrack, selectTrack } =
+    useTracks();
+
+  const { currentTime, setCurrentTime, registerSeek, seekTo } = usePlayerContext();
+
+  const { markers, addMarker, updateMarker, deleteMarker } = useTrackMarkers({
+    currentTrack,
     updateTrack,
-    deleteTrack, 
-    selectTrack,
-  } = useTracks();
+  });
 
-  const {
-    markers,
-    addMarker,
-    deleteMarker,
-    updateMarker,
-    setMarkers,
-  } = useMarkers(currentTrack?.markers || []);
-
-  const [currentTime, setCurrentTime] = useState(0);
-  const [seekFn, setSeekFn] = useState<((time: number) => void) | null>(null);
   const [showLearningPanel, setShowLearningPanel] = useState(false);
   const [learningExpanded, setLearningExpanded] = useState(false);
 
-  const handleTimeUpdate = useCallback((time: number) => {
-    setCurrentTime(time);
-  }, []);
-
-  // Callback para obtener la función seek del player
-  const handleSeekAvailable = useCallback((seekFunction: (time: number) => void) => {
-    setSeekFn(() => seekFunction);
-  }, []);
-
-  // Actualizar marcadores cuando cambia el track
-  const handleTrackSelect = (id: string) => {
+  function handleTrackSelect(id: string) {
     selectTrack(id);
-    const track = tracks.find(t => t.id === id);
-    if (track) {
-      setMarkers(track.markers);
-    }
-  };
+  }
 
-  // Añadir marcador y actualizar track
-  const handleAddMarker = (type: MarkerType, time: number, note?: string) => {
-    const newMarker = addMarker(type, time, note);
-    if (currentTrack && newMarker) {
-      const updatedTrack: Track = {
-        ...currentTrack,
-        markers: [...markers, newMarker],
-      };
-      updateTrack(updatedTrack);
-    }
-  };
-
-  // Actualizar marcador existente
-  const handleUpdateMarker = (id: string, updates: Partial<Marker>) => {
-    updateMarker(id, updates);
-    if (currentTrack) {
-      const updatedMarkers = markers.map(m => 
-        m.id === id ? { ...m, ...updates } : m
-      );
-      const updatedTrack: Track = {
-        ...currentTrack,
-        markers: updatedMarkers,
-      };
-      updateTrack(updatedTrack);
-    }
-  };
-
-  // Wrapper para edición de marcador (transforma objeto Marker en id + updates)
-  const handleEditMarker = (marker: Marker) => {
-    handleUpdateMarker(marker.id, { type: marker.type, note: marker.note });
-  };
-
-  // Eliminar marcador y actualizar track
-  const handleDeleteMarker = (id: string) => {
-    deleteMarker(id);
-    if (currentTrack) {
-      const updatedTrack: Track = {
-        ...currentTrack,
-        markers: markers.filter(m => m.id !== id),
-      };
-      updateTrack(updatedTrack);
-    }
-  };
-
-  const handleSeekTo = (time: number) => {
-    setCurrentTime(time);
-    if (seekFn) {
-      seekFn(time);
-    }
-  };
+  function handleEditMarker(marker: Marker) {
+    updateMarker(marker.id, { type: marker.type, note: marker.note });
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -123,18 +59,16 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Learning Panel */}
-      <LearningPanel 
-        isOpen={showLearningPanel} 
+      <LearningPanel
+        isOpen={showLearningPanel}
         onClose={() => setShowLearningPanel(false)}
         isExpanded={learningExpanded}
-        onExpand={() => setLearningExpanded(!learningExpanded)}
+        onExpand={() => setLearningExpanded((v) => !v)}
       />
 
-      {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sidebar: Track List & Upload */}
+          {/* Sidebar */}
           <div className="lg:col-span-1 space-y-6">
             <motion.div
               initial={{ opacity: 0, x: -20 }}
@@ -158,7 +92,7 @@ export default function Home() {
             </motion.div>
           </div>
 
-          {/* Main Area: Player & Markers */}
+          {/* Main area */}
           <div className="lg:col-span-2 space-y-6">
             {currentTrack ? (
               <>
@@ -169,13 +103,12 @@ export default function Home() {
                 >
                   <AudioPlayer
                     track={currentTrack}
-                    onTimeUpdate={handleTimeUpdate}
-                    onSeek={handleSeekAvailable}
+                    onTimeUpdate={setCurrentTime}
+                    onSeek={registerSeek}
                   />
                 </motion.div>
 
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -186,6 +119,7 @@ export default function Home() {
                       isPlaying={currentTrack !== null}
                     />
                   </motion.div>
+
                   <motion.div
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -193,14 +127,13 @@ export default function Home() {
                   >
                     <MarkerList
                       markers={markers}
-                      onDelete={handleDeleteMarker}
+                      onDelete={deleteMarker}
                       onEdit={handleEditMarker}
-                      onSeek={handleSeekTo}
+                      onSeek={seekTo}
                       currentTime={currentTime}
-                      onAddMarker={handleAddMarker}
+                      onAddMarker={addMarker}
                     />
                   </motion.div>
-
                 </div>
               </>
             ) : (
@@ -214,7 +147,7 @@ export default function Home() {
                   Bienvenido a Practice Room
                 </h2>
                 <p className="text-slate-400 max-w-md mx-auto">
-                  Sube un archivo de audio o selecciona un track de tu biblioteca 
+                  Sube un archivo de audio o selecciona un track de tu biblioteca
                   para comenzar a practicar y marcar momentos importantes.
                 </p>
               </motion.div>
@@ -223,14 +156,21 @@ export default function Home() {
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-slate-700 mt-12 bg-slate-900/50">
         <div className="container mx-auto px-4 py-6 text-center text-slate-500 text-sm">
-          <p>
-            Practice Room - Una herramienta educativa para aprender a pinchar música
-          </p>
+          <p>Practice Room - Una herramienta educativa para aprender a pinchar música</p>
         </div>
       </footer>
     </div>
+  );
+}
+
+// ─── Page (envuelve en el provider) ──────────────────────────────────────────
+
+export default function Home() {
+  return (
+    <PlayerProvider>
+      <MainContent />
+    </PlayerProvider>
   );
 }

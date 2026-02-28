@@ -1,81 +1,57 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Track } from '@/lib/types';
-import { storageUtils } from '@/lib/utils';
-import { deleteAudioFile } from '@/lib/audioStorage';
+import { useCallback, useEffect, useState } from 'react';
+import type { Track } from '@/types';
+import { trackService } from '@/services/trackService';
+import { deleteAudioFile } from '@/services/audioService';
 
-/**
- * Hook para manejar tracks
- * Proporciona estado y funciones para gestionar la colección de tracks
- */
-export const useTracks = () => {
+export function useTracks() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Cargar tracks al montar el componente
   useEffect(() => {
-    // Limpiar tracks antiguos con URLs de blob inválidas
-    const removedCount = storageUtils.cleanInvalidTracks();
-    if (removedCount > 0) {
-      console.log(`✨ Se limpiaron ${removedCount} tracks antiguos automáticamente`);
+    const removed = trackService.removeStaleBlobs();
+    if (removed > 0) {
+      console.info(`[useTracks] Se limpiaron ${removed} tracks con archivos inválidos`);
     }
-    
-    const loadedTracks = storageUtils.getTracks();
-    setTracks(loadedTracks);
+    setTracks(trackService.getAll());
     setIsLoading(false);
   }, []);
 
-  /**
-   * Añade un nuevo track
-   */
-  const addTrack = (track: Track) => {
-    storageUtils.saveTrack(track);
-    setTracks(prev => [...prev, track]);
-  };
+  const addTrack = useCallback((track: Track) => {
+    trackService.save(track);
+    setTracks((prev) => [...prev, track]);
+  }, []);
 
-  /**
-   * Actualiza un track existente
-   */
-  const updateTrack = (track: Track) => {
-    storageUtils.saveTrack(track);
-    setTracks(prev => prev.map(t => t.id === track.id ? track : t));
-    
-    if (currentTrack?.id === track.id) {
-      setCurrentTrack(track);
-    }
-  };
+  const updateTrack = useCallback((track: Track) => {
+    trackService.save(track);
+    setTracks((prev) => prev.map((t) => (t.id === track.id ? track : t)));
+    setCurrentTrack((prev) => (prev?.id === track.id ? track : prev));
+  }, []);
 
-  /**
-   * Elimina un track
-   */
-  const deleteTrack = (id: string) => {
-    // Obtener el track antes de eliminarlo para limpiar el archivo
-    const track = tracks.find(t => t.id === id);
-    
-    storageUtils.deleteTrack(id);
-    setTracks(prev => prev.filter(t => t.id !== id));
-    
-    // Eliminar el archivo de audio de IndexedDB
-    if (track) {
-      deleteAudioFile(track.file_url).catch(err => 
-        console.error('Error al eliminar archivo de audio:', err)
-      );
-    }
-    
-    if (currentTrack?.id === id) {
-      setCurrentTrack(null);
-    }
-  };
+  const deleteTrack = useCallback(
+    (id: string) => {
+      const track = tracks.find((t) => t.id === id);
+      trackService.delete(id);
+      setTracks((prev) => prev.filter((t) => t.id !== id));
+      setCurrentTrack((prev) => (prev?.id === id ? null : prev));
 
-  /**
-   * Selecciona un track como actual
-   */
-  const selectTrack = (id: string) => {
-    const track = tracks.find(t => t.id === id);
-    setCurrentTrack(track || null);
-  };
+      if (track) {
+        deleteAudioFile(track.file_url).catch((err) =>
+          console.error('[useTracks] Error al eliminar archivo de audio:', err),
+        );
+      }
+    },
+    [tracks],
+  );
+
+  const selectTrack = useCallback(
+    (id: string) => {
+      setCurrentTrack(tracks.find((t) => t.id === id) ?? null);
+    },
+    [tracks],
+  );
 
   return {
     tracks,
@@ -87,4 +63,4 @@ export const useTracks = () => {
     selectTrack,
     setCurrentTrack,
   };
-};
+}

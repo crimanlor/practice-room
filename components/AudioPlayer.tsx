@@ -1,51 +1,40 @@
 'use client';
 
-import { useAudioPlayer } from '@/hooks/useAudioPlayer';
-import { Track } from '@/lib/types';
-import { formatTime } from '@/lib/utils';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
+
+import { useAudioPlayer } from '@/hooks/useAudioPlayer';
+import type { Track } from '@/types';
+import { formatTime } from '@/lib/utils';
 
 interface AudioPlayerProps {
   track: Track;
   onReady?: (duration: number) => void;
+  /** Callback llamado en cada actualización de tiempo */
   onTimeUpdate?: (time: number) => void;
+  /** Callback que expone la función seek al padre */
   onSeek?: (seekFn: (time: number) => void) => void;
 }
 
 /**
- * Componente principal del reproductor de audio
- * Integra WaveSurfer para visualización y controles de reproducción
+ * Reproductor de audio principal.
+ * Integra WaveSurfer para visualización de forma de onda y controles básicos.
  */
-export const AudioPlayer = ({ track, onReady, onTimeUpdate, onSeek }: AudioPlayerProps) => {
-  const { 
-    waveformRef, 
-    playerState, 
-    isReady,
-    error,
-    togglePlayPause, 
-    setVolume,
-    seekTo,
-  } = useAudioPlayer({ 
-    audioUrl: track.file_url,
-    onReady,
-  });
+export function AudioPlayer({ track, onReady, onTimeUpdate, onSeek }: AudioPlayerProps) {
+  const { waveformRef, playerState, isReady, error, togglePlayPause, setVolume, seekTo } =
+    useAudioPlayer({ audioUrl: track.file_url, onReady });
 
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
 
-  // Exponer función seek al padre
+  // Exponer función seek al padre (usada por PlayerContext)
   useEffect(() => {
-    if (onSeek) {
-      onSeek(seekTo);
-    }
+    onSeek?.(seekTo);
   }, [onSeek, seekTo]);
 
-  // Notificar cambios de tiempo al padre
+  // Notificar cambios de tiempo al padre (usados por PlayerContext)
   useEffect(() => {
-    if (onTimeUpdate) {
-      onTimeUpdate(playerState.currentTime);
-    }
+    onTimeUpdate?.(playerState.currentTime);
   }, [playerState.currentTime, onTimeUpdate]);
 
   return (
@@ -58,20 +47,20 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate, onSeek }: AudioPlaye
         </p>
       </div>
 
-      {/* Visualización de forma de onda */}
+      {/* Forma de onda */}
       <div className="mb-6 bg-slate-900 rounded-lg p-4">
         <div ref={waveformRef} className="w-full" />
         {!isReady && !error && (
           <div className="flex items-center justify-center h-[100px]">
-            <div className="text-slate-400">Cargando audio...</div>
+            <p className="text-slate-400">Cargando audio...</p>
           </div>
         )}
         {error && (
-          <div className="flex items-center justify-center h-[100px]">
-            <div className="text-red-400 text-center">
-              <p className="font-semibold mb-1">⚠️ {error}</p>
+          <div className="flex items-center justify-center h-[100px] text-center">
+            <div>
+              <p className="font-semibold text-red-400 mb-1">⚠️ {error}</p>
               <p className="text-sm text-slate-400">
-                Sugerencia: Elimina este track y sube el archivo nuevamente
+                Elimina este track y sube el archivo nuevamente
               </p>
             </div>
           </div>
@@ -80,13 +69,13 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate, onSeek }: AudioPlaye
 
       {/* Controles */}
       <div className="flex items-center gap-4">
-        {/* Play/Pause Button */}
         <motion.button
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.95 }}
           onClick={togglePlayPause}
           disabled={!isReady}
-          className="bg-primary-500 hover:bg-primary-600 disabled:bg-slate-600 
+          aria-label={playerState.isPlaying ? 'Pausar' : 'Reproducir'}
+          className="bg-primary-500 hover:bg-primary-600 disabled:bg-slate-600
                      text-white rounded-full p-4 transition-colors"
         >
           {playerState.isPlaying ? (
@@ -96,43 +85,44 @@ export const AudioPlayer = ({ track, onReady, onTimeUpdate, onSeek }: AudioPlaye
           )}
         </motion.button>
 
-        {/* Volume Control */}
-        <div 
+        {/* Volumen */}
+        <div
           className="relative"
           onMouseEnter={() => setShowVolumeSlider(true)}
           onMouseLeave={() => setShowVolumeSlider(false)}
         >
-          <button 
+          <button
+            aria-label="Control de volumen"
             className="text-slate-400 hover:text-white transition-colors"
             onClick={() => setVolume(playerState.volume > 0 ? 0 : 1)}
           >
             {playerState.volume > 0 ? <Volume2 size={20} /> : <VolumeX size={20} />}
           </button>
-          
+
           {showVolumeSlider && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 
+              className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
                          bg-slate-700 rounded-lg p-2 shadow-lg"
             >
               <input
                 type="range"
                 min="0"
                 max="100"
-                value={playerState.volume * 100}
+                value={Math.round(playerState.volume * 100)}
                 onChange={(e) => setVolume(Number(e.target.value) / 100)}
+                aria-label="Volumen"
                 className="w-24 h-1 accent-primary-500 cursor-pointer"
               />
             </motion.div>
           )}
         </div>
 
-        {/* Info adicional */}
         <div className="ml-auto text-slate-400 text-sm">
           {track.markers.length} marcador{track.markers.length !== 1 ? 'es' : ''}
         </div>
       </div>
     </div>
   );
-};
+}

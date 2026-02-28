@@ -2,103 +2,103 @@
 
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Music } from 'lucide-react';
-import { Track } from '@/lib/types';
+import { Upload, Music, AlertCircle } from 'lucide-react';
+
+import type { Track } from '@/types';
 import { generateId } from '@/lib/utils';
-import { saveAudioFile } from '@/lib/audioStorage';
+import { saveAudioFile } from '@/services/audioService';
 
 interface FileUploadProps {
   onTrackAdd: (track: Track) => void;
 }
 
+const ACCEPTED_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a'];
+
+function isAudioFile(file: File): boolean {
+  return file.type.startsWith('audio/') || ACCEPTED_TYPES.includes(file.type);
+}
+
 /**
- * Componente para subir archivos de audio
- * Permite drag & drop o selección de archivo
+ * Zona de carga de archivos de audio.
+ * Soporta click para seleccionar y drag & drop.
  */
-export const FileUpload = ({ onTrackAdd }: FileUploadProps) => {
+export function FileUpload({ onTrackAdd }: FileUploadProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const handleFile = async (file: File) => {
-    if (!file.type.startsWith('audio/')) {
-      alert('Por favor selecciona un archivo de audio válido');
+  async function handleFile(file: File) {
+    if (!isAudioFile(file)) {
+      setUploadError('Por favor selecciona un archivo de audio válido (MP3, WAV, OGG, M4A)');
       return;
     }
 
     setIsProcessing(true);
+    setUploadError(null);
 
     try {
-      // Generar ID único para el track
       const trackId = generateId();
-      
-      // Guardar archivo en IndexedDB
       await saveAudioFile(trackId, file);
-      
-      // Crear URL temporal del blob para obtener duración
+
       const fileUrl = URL.createObjectURL(file);
-      
-      // Crear elemento de audio temporal para obtener duración
       const audio = new Audio(fileUrl);
-      
-      audio.addEventListener('loadedmetadata', () => {
-        const track: Track = {
-          id: trackId,
-          name: file.name.replace(/\.[^/.]+$/, ''), // Quitar extensión
-          file_url: trackId, // Guardar el ID en lugar de la URL de blob
-          duration: audio.duration,
-          markers: [],
-          createdAt: Date.now(),
-          updatedAt: Date.now(),
-        };
 
-        onTrackAdd(track);
-        setIsProcessing(false);
-        
-        // Limpiar la URL temporal
-        URL.revokeObjectURL(fileUrl);
+      await new Promise<void>((resolve, reject) => {
+        audio.addEventListener('loadedmetadata', () => {
+          const track: Track = {
+            id: trackId,
+            name: file.name.replace(/\.[^/.]+$/, ''),
+            file_url: trackId,
+            duration: audio.duration,
+            markers: [],
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          };
+          onTrackAdd(track);
+          URL.revokeObjectURL(fileUrl);
+          resolve();
+        });
+        audio.addEventListener('error', () => {
+          URL.revokeObjectURL(fileUrl);
+          reject(new Error('No se pudo leer el archivo de audio'));
+        });
       });
-
-      audio.addEventListener('error', () => {
-        alert('Error al cargar el archivo de audio');
-        setIsProcessing(false);
-        URL.revokeObjectURL(fileUrl);
-      });
-    } catch (error) {
-      console.error('Error al procesar archivo:', error);
-      alert('Error al procesar el archivo');
+    } catch (err) {
+      console.error('[FileUpload] Error al procesar archivo:', err);
+      setUploadError(
+        err instanceof Error ? err.message : 'Error al procesar el archivo',
+      );
+    } finally {
       setIsProcessing(false);
+      // Limpiar el input para permitir re-subir el mismo archivo
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
-  };
+  }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      handleFile(file);
-    }
-  };
+    if (file) handleFile(file);
+  }
 
-  const handleDragOver = (e: React.DragEvent) => {
+  function handleDragOver(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(true);
-  };
+  }
 
-  const handleDragLeave = () => {
+  function handleDragLeave() {
     setIsDragging(false);
-  };
+  }
 
-  const handleDrop = (e: React.DragEvent) => {
+  function handleDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragging(false);
-
     const file = e.dataTransfer.files[0];
-    if (file) {
-      handleFile(file);
-    }
-  };
+    if (file) handleFile(file);
+  }
 
   return (
-    <div className="w-full">
+    <div className="w-full space-y-2">
       <input
         ref={fileInputRef}
         type="file"
@@ -108,21 +108,21 @@ export const FileUpload = ({ onTrackAdd }: FileUploadProps) => {
       />
 
       <motion.div
-        whileHover={{ scale: 1.01 }}
-        whileTap={{ scale: 0.99 }}
-        onClick={() => fileInputRef.current?.click()}
+        whileHover={isProcessing ? {} : { scale: 1.01 }}
+        whileTap={isProcessing ? {} : { scale: 0.99 }}
+        onClick={() => !isProcessing && fileInputRef.current?.click()}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
-        className={`
-          border-2 border-dashed rounded-lg p-8 text-center cursor-pointer
-          transition-colors
-          ${isDragging 
-            ? 'border-primary-400 bg-primary-500/10' 
-            : 'border-slate-600 hover:border-slate-500 bg-slate-800/50'
-          }
-          ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
+        role="button"
+        aria-label="Subir archivo de audio"
+        className={[
+          'border-2 border-dashed rounded-lg p-8 text-center transition-colors',
+          isDragging
+            ? 'border-primary-400 bg-primary-500/10'
+            : 'border-slate-600 hover:border-slate-500 bg-slate-800/50',
+          isProcessing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer',
+        ].join(' ')}
       >
         {isProcessing ? (
           <div className="space-y-2">
@@ -135,15 +135,21 @@ export const FileUpload = ({ onTrackAdd }: FileUploadProps) => {
             <p className="text-slate-300 text-lg font-medium">
               Arrastra un archivo de audio aquí
             </p>
-            <p className="text-slate-500 text-sm">
-              o haz clic para seleccionar
-            </p>
+            <p className="text-slate-500 text-sm">o haz clic para seleccionar</p>
             <p className="text-slate-600 text-xs mt-2">
               Formatos soportados: MP3, WAV, OGG, M4A
             </p>
           </div>
         )}
       </motion.div>
+
+      {uploadError && (
+        <div className="flex items-center gap-2 text-red-400 text-sm bg-red-400/10 
+                        rounded-lg px-3 py-2">
+          <AlertCircle size={16} className="flex-shrink-0" />
+          <span>{uploadError}</span>
+        </div>
+      )}
     </div>
   );
-};
+}

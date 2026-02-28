@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Play, Pause, Plus, Minus, RotateCcw, Volume2, VolumeX, Mic } from 'lucide-react';
+import { Minus, Pause, Play, Plus, RotateCcw } from 'lucide-react';
 
 interface SongAnalyzerProps {
   currentTime: number;
@@ -10,198 +10,140 @@ interface SongAnalyzerProps {
   onTapBpm?: (bpm: number) => void;
 }
 
-const TAP_COOLDOWN = 2000;
-const TAP_WINDOW = 5000;
+const TAP_COOLDOWN_MS = 2000;
+const TAP_WINDOW_MS = 5000;
+const MIN_BPM = 60;
+const MAX_BPM = 200;
 
-export const SongAnalyzer = ({ currentTime, isPlaying, onTapBpm }: SongAnalyzerProps) => {
+function calculateBpm(tapTimes: number[]): number | null {
+  if (tapTimes.length < 2) return null;
+  const intervals = tapTimes.slice(1).map((t, i) => t - tapTimes[i]);
+  const avg = intervals.reduce((a, b) => a + b, 0) / intervals.length;
+  const bpm = Math.round(60_000 / avg);
+  return bpm >= MIN_BPM && bpm <= MAX_BPM ? bpm : null;
+}
+
+export function SongAnalyzer({ currentTime, isPlaying, onTapBpm }: SongAnalyzerProps) {
   const [activeTab, setActiveTab] = useState<'bpm' | 'metronome' | 'count'>('bpm');
-  
+
+  // ── BPM tap ──────────────────────────────────────────────────────────────
   const [tapTimes, setTapTimes] = useState<number[]>([]);
   const [calculatedBpm, setCalculatedBpm] = useState<number | null>(null);
-  const [isMetronomePlaying, setIsMetronomePlaying] = useState(false);
-  const [metronomeBpm, setMetronomeBpm] = useState(120);
-  const [countBeats, setCountBeats] = useState(1);
-  const [isCounting, setIsCounting] = useState(false);
-  const [countIn, setCountIn] = useState(false);
-  
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const metronomeIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const lastTapTimeRef = useRef<number>(0);
-
-  const playClick = useCallback((isAccent: boolean = false) => {
-    if (typeof window === 'undefined') return;
-    
-    if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    
-    const ctx = audioContextRef.current;
-    const oscillator = ctx.createOscillator();
-    const gainNode = ctx.createGain();
-    
-    oscillator.connect(gainNode);
-    gainNode.connect(ctx.destination);
-    
-    oscillator.frequency.value = isAccent ? 1000 : 800;
-    oscillator.type = 'sine';
-    
-    gainNode.gain.setValueAtTime(0.3, ctx.currentTime);
-    gainNode.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-    
-    oscillator.start(ctx.currentTime);
-    oscillator.stop(ctx.currentTime + 0.1);
-  }, []);
+  const lastTapRef = useRef(0);
 
   const handleTap = useCallback(() => {
     const now = Date.now();
-    
-    if (now - lastTapTimeRef.current > TAP_COOLDOWN) {
+    if (now - lastTapRef.current > TAP_COOLDOWN_MS) {
       setTapTimes([]);
       setCalculatedBpm(null);
     }
-    lastTapTimeRef.current = now;
-    
-    const newTapTimes = [...tapTimes, now].filter(t => now - t < TAP_WINDOW);
-    setTapTimes(newTapTimes);
-    
-    if (newTapTimes.length >= 2) {
-      const intervals: number[] = [];
-      for (let i = 1; i < newTapTimes.length; i++) {
-        intervals.push(newTapTimes[i] - newTapTimes[i - 1]);
-      }
-      const avgInterval = intervals.reduce((a, b) => a + b, 0) / intervals.length;
-      const bpm = Math.round(60000 / avgInterval);
-      
-      if (bpm >= 60 && bpm <= 200) {
-        setCalculatedBpm(bpm);
-        if (onTapBpm) onTapBpm(bpm);
-      }
-    }
-  }, [tapTimes, onTapBpm]);
+    lastTapRef.current = now;
 
-  const handleReset = () => {
-    setTapTimes([]);
-    setCalculatedBpm(null);
-  };
+    setTapTimes((prev) => {
+      const next = [...prev, now].filter((t) => now - t < TAP_WINDOW_MS);
+      const bpm = calculateBpm(next);
+      if (bpm !== null) {
+        setCalculatedBpm(bpm);
+        onTapBpm?.(bpm);
+      }
+      return next;
+    });
+  }, [onTapBpm]);
+
+  // ── Metronome ─────────────────────────────────────────────────────────────
+  const [isMetronomePlaying, setIsMetronomePlaying] = useState(false);
+  const [metronomeBpm, setMetronomeBpm] = useState(120);
+  const [beat, setBeat] = useState(1);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const playClick = useCallback((isAccent: boolean) => {
+    if (typeof window === 'undefined') return;
+    if (!audioCtxRef.current) {
+      audioCtxRef.current = new (
+        window.AudioContext ||
+        // Safari legacy
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext!
+      )();
+    }
+    const ctx = audioCtxRef.current;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = isAccent ? 1000 : 800;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.1);
+  }, []);
 
   useEffect(() => {
-    if (isMetronomePlaying) {
-      const interval = 60000 / metronomeBpm;
-      
-      const tick = () => {
-        setCountBeats(prev => {
-          const next = prev >= 4 ? 1 : prev + 1;
-          playClick(next === 1);
-          return next;
-        });
-      };
-      
-      tick();
-      metronomeIntervalRef.current = setInterval(tick, interval);
-    } else {
-      if (metronomeIntervalRef.current) {
-        clearInterval(metronomeIntervalRef.current);
-        metronomeIntervalRef.current = null;
-      }
-      setCountBeats(1);
+    if (!isMetronomePlaying) {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      setBeat(1);
+      return;
     }
-    
+
+    const tick = () => {
+      setBeat((prev) => {
+        const next = prev >= 4 ? 1 : prev + 1;
+        playClick(next === 1);
+        return next;
+      });
+    };
+
+    tick();
+    intervalRef.current = setInterval(tick, 60_000 / metronomeBpm);
     return () => {
-      if (metronomeIntervalRef.current) {
-        clearInterval(metronomeIntervalRef.current);
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [isMetronomePlaying, metronomeBpm, playClick]);
 
   useEffect(() => {
     return () => {
-      if (audioContextRef.current) {
-        audioContextRef.current.close();
-      }
+      audioCtxRef.current?.close();
     };
   }, []);
 
-  const adjustBpm = (delta: number) => {
-    setMetronomeBpm(prev => Math.max(60, Math.min(200, prev + delta)));
-  };
+  function adjustBpm(delta: number) {
+    setMetronomeBpm((prev) => Math.max(MIN_BPM, Math.min(MAX_BPM, prev + delta)));
+  }
 
-  const getCountDisplay = () => {
-    if (countIn) {
-      return (
-        <div className="flex gap-4 justify-center">
-          {[1, 2, 3, 4].map(beat => (
-            <div
-              key={beat}
-              className={`w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all ${
-                beat === countBeats 
-                  ? 'bg-primary-500 text-white scale-110' 
-                  : 'bg-slate-700 text-slate-400'
-              }`}
-            >
-              {beat}
-            </div>
-          ))}
-        </div>
-      );
-    }
-    return (
-      <div className="text-center">
-        <div className={`text-6xl font-bold mb-2 ${countBeats === 1 ? 'text-primary-400' : 'text-white'}`}>
-          {countBeats}
-        </div>
-        <div className="text-slate-400 text-sm">de 4</div>
-      </div>
-    );
-  };
+  // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="bg-slate-800 rounded-lg p-4 shadow-xl">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold text-white">Análisis</h3>
-      </div>
+      <h3 className="text-lg font-bold text-white mb-4">Análisis</h3>
 
+      {/* Tabs */}
       <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => setActiveTab('bpm')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'bpm' 
-              ? 'bg-primary-500 text-white' 
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          BPM
-        </button>
-        <button
-          onClick={() => setActiveTab('metronome')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'metronome' 
-              ? 'bg-primary-500 text-white' 
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          Metrónomo
-        </button>
-        <button
-          onClick={() => setActiveTab('count')}
-          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-            activeTab === 'count' 
-              ? 'bg-primary-500 text-white' 
-              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-          }`}
-        >
-          Conteo
-        </button>
+        {(['bpm', 'metronome', 'count'] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={[
+              'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors',
+              activeTab === tab
+                ? 'bg-primary-500 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600',
+            ].join(' ')}
+          >
+            {tab === 'bpm' ? 'BPM' : tab === 'metronome' ? 'Metrónomo' : 'Conteo'}
+          </button>
+        ))}
       </div>
 
+      {/* BPM Tab */}
       {activeTab === 'bpm' && (
         <div className="space-y-4">
           <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-2">
-              {calculatedBpm || '--'}
+            <div className="text-4xl font-bold text-white mb-1">
+              {calculatedBpm ?? '--'}
             </div>
             <div className="text-slate-400 text-sm">BPM detectado</div>
           </div>
-          
           <div className="flex gap-2">
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -212,39 +154,36 @@ export const SongAnalyzer = ({ currentTime, isPlaying, onTapBpm }: SongAnalyzerP
               TAP
             </motion.button>
             <button
-              onClick={handleReset}
+              onClick={() => { setTapTimes([]); setCalculatedBpm(null); }}
               className="bg-slate-700 hover:bg-slate-600 text-white p-3 rounded-lg transition-colors"
-              title="Reiniciar"
+              aria-label="Reiniciar"
             >
               <RotateCcw size={20} />
             </button>
           </div>
-          
           <p className="text-xs text-slate-400 text-center">
-            Toca "TAP" al ritmo de la música para contar los BPM
+            Toca "TAP" al ritmo de la música para detectar los BPM
           </p>
-
           {tapTimes.length > 0 && (
-            <div className="text-center text-xs text-slate-500">
+            <p className="text-center text-xs text-slate-500">
               {tapTimes.length} toques registrados
-            </div>
+            </p>
           )}
         </div>
       )}
 
+      {/* Metronome Tab */}
       {activeTab === 'metronome' && (
         <div className="space-y-4">
           <div className="text-center">
-            <div className="text-4xl font-bold text-white mb-2">
-              {metronomeBpm}
-            </div>
+            <div className="text-4xl font-bold text-white mb-1">{metronomeBpm}</div>
             <div className="text-slate-400 text-sm">BPM</div>
           </div>
-          
           <div className="flex items-center justify-center gap-4">
             <button
               onClick={() => adjustBpm(-5)}
               className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg transition-colors"
+              aria-label="-5 BPM"
             >
               <Minus size={20} />
             </button>
@@ -257,12 +196,14 @@ export const SongAnalyzer = ({ currentTime, isPlaying, onTapBpm }: SongAnalyzerP
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              onClick={() => setIsMetronomePlaying(!isMetronomePlaying)}
-              className={`p-4 rounded-full transition-colors ${
-                isMetronomePlaying 
-                  ? 'bg-red-500 hover:bg-red-600' 
-                  : 'bg-primary-500 hover:bg-primary-600'
-              } text-white`}
+              onClick={() => setIsMetronomePlaying((v) => !v)}
+              className={[
+                'p-4 rounded-full transition-colors text-white',
+                isMetronomePlaying
+                  ? 'bg-red-500 hover:bg-red-600'
+                  : 'bg-primary-500 hover:bg-primary-600',
+              ].join(' ')}
+              aria-label={isMetronomePlaying ? 'Pausar metrónomo' : 'Iniciar metrónomo'}
             >
               {isMetronomePlaying ? <Pause size={24} /> : <Play size={24} />}
             </motion.button>
@@ -275,63 +216,46 @@ export const SongAnalyzer = ({ currentTime, isPlaying, onTapBpm }: SongAnalyzerP
             <button
               onClick={() => adjustBpm(5)}
               className="bg-slate-700 hover:bg-slate-600 text-white p-2 rounded-lg transition-colors"
+              aria-label="+5 BPM"
             >
               <Plus size={20} />
             </button>
           </div>
-          
           <p className="text-xs text-slate-400 text-center">
             Ajusta el tempo y usa el metrónomo para practicar
           </p>
         </div>
       )}
 
+      {/* Count Tab */}
       {activeTab === 'count' && (
         <div className="space-y-4">
-          <div className="flex justify-center items-center py-4">
-            {getCountDisplay()}
+          <div className="flex justify-center gap-4 py-4">
+            {[1, 2, 3, 4].map((b) => (
+              <div
+                key={b}
+                className={[
+                  'w-12 h-12 rounded-full flex items-center justify-center text-lg font-bold transition-all',
+                  b === beat ? 'bg-primary-500 text-white scale-110' : 'bg-slate-700 text-slate-400',
+                ].join(' ')}
+              >
+                {b}
+              </div>
+            ))}
           </div>
-          
           <div className="flex gap-2">
             <button
-              onClick={() => setCountIn(!countIn)}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                countIn 
-                  ? 'bg-primary-500 text-white' 
-                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-              }`}
+              onClick={() => setIsMetronomePlaying((v) => !v)}
+              className={[
+                'flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors text-white',
+                isMetronomePlaying
+                  ? 'bg-red-500 hover:bg-red-600'
+                  : 'bg-primary-500 hover:bg-primary-600',
+              ].join(' ')}
             >
-              Count In (4 beats)
-            </button>
-            <button
-              onClick={() => setIsCounting(!isCounting)}
-              className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                isCounting 
-                  ? 'bg-red-500 hover:bg-red-600 text-white' 
-                  : 'bg-primary-500 hover:bg-primary-600 text-white'
-              }`}
-            >
-              {isCounting ? 'Detener' : 'Iniciar'}
+              {isMetronomePlaying ? 'Detener' : 'Iniciar conteo'}
             </button>
           </div>
-
-          {isCounting && (
-            <div className="flex justify-center gap-2">
-              {[1, 2, 3, 4].map(beat => (
-                <div
-                  key={beat}
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all ${
-                    beat === (countBeats % 4 || 4) 
-                      ? 'bg-primary-500 text-white scale-110' 
-                      : 'bg-slate-700 text-slate-400'
-                  }`}
-                >
-                  {beat}
-                </div>
-              ))}
-            </div>
-          )}
-          
           <p className="text-xs text-slate-400 text-center">
             Practica contando los compases de 4 tiempos
           </p>
@@ -339,4 +263,4 @@ export const SongAnalyzer = ({ currentTime, isPlaying, onTapBpm }: SongAnalyzerP
       )}
     </div>
   );
-};
+}
