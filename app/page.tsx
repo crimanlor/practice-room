@@ -68,9 +68,88 @@ function MainContent() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sidebar */}
-          <div className="lg:col-span-1 space-y-6">
+
+          {/* Hero section — visible solo cuando no hay track, va primero en mobile */}
+          {!currentTrack && (
             <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="order-first lg:order-last lg:col-span-2 space-y-6"
+            >
+              {/* Bienvenida */}
+              <div className="bg-slate-800 rounded-lg p-8 text-center">
+                <Music2 className="mx-auto text-primary-400 mb-4" size={56} />
+                <h2 className="text-2xl font-bold text-white mb-3">
+                  Bienvenid@ a Practice Room
+                </h2>
+                <p className="text-slate-400 max-w-lg mx-auto text-sm leading-relaxed mb-6">
+                  Practice Room es una herramienta para principiantes que quieren entender
+                  la estructura de sus canciones antes de mezclar. Carga tus pistas, identifica
+                  secciones clave como intros, drops o breaks, analiza BPM y tonalidad, y marca
+                  los puntos de entrada y salida para después construir mezclas más precisas.
+                </p>
+                {/* CTA solo visible en mobile */}
+                <a
+                  href="#upload"
+                  className="lg:hidden inline-flex items-center gap-2 bg-primary-500 hover:bg-primary-400 text-white text-sm font-semibold px-5 py-2.5 rounded-lg transition-colors"
+                >
+                  <Upload size={16} />
+                  Subir canción
+                </a>
+              </div>
+
+              {/* Pasos de uso */}
+              <div className="bg-slate-800 rounded-lg p-6">
+                <h3 className="text-white font-semibold mb-5 text-center">¿Cómo empezar?</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {[
+                    {
+                      icon: <Upload size={20} className="text-primary-400" />,
+                      step: '1',
+                      title: 'Sube tu música',
+                      desc: 'Importa archivos MP3, WAV u otros formatos desde tu dispositivo.',
+                    },
+                    {
+                      icon: <Headphones size={20} className="text-primary-400" />,
+                      step: '2',
+                      title: 'Escucha y analiza',
+                      desc: 'Reproduce la pista y observa el análisis de BPM, tonalidad y estructura.',
+                    },
+                    {
+                      icon: <BookmarkPlus size={20} className="text-primary-400" />,
+                      step: '3',
+                      title: 'Marca los momentos clave',
+                      desc: 'Añade marcadores en drops, breaks, entradas o cualquier referencia.',
+                    },
+                    {
+                      icon: <BarChart2 size={20} className="text-primary-400" />,
+                      step: '4',
+                      title: 'Practica y mejora',
+                      desc: 'Usa el panel de aprendizaje para repasar conceptos y perfeccionar tu técnica.',
+                    },
+                  ].map(({ icon, step, title, desc }) => (
+                    <div key={step} className="flex gap-4 p-4 bg-slate-700/50 rounded-lg">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-slate-300 text-xs font-bold">
+                        {step}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          {icon}
+                          <span className="text-white text-sm font-medium">{title}</span>
+                        </div>
+                        <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Sidebar — FileUpload + TrackList */}
+          <div className="lg:col-span-1 space-y-6 order-2 lg:order-first">
+            <motion.div
+              id="upload"
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.1 }}
@@ -92,118 +171,51 @@ function MainContent() {
             </motion.div>
           </div>
 
-          {/* Main area */}
-          <div className="lg:col-span-2 space-y-6">
-            {currentTrack ? (
-              <>
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.3 }}
-                >
-                  <AudioPlayer
-                    track={currentTrack}
-                    onTimeUpdate={setCurrentTime}
-                    onSeek={registerSeek}
-                  />
-                </motion.div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
-                  >
-                    <SongAnalyzer
-                      currentTime={currentTime}
-                      isPlaying={currentTrack !== null}
-                    />
-                  </motion.div>
-
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                  >
-                    <MarkerList
-                      markers={markers}
-                      onDelete={deleteMarker}
-                      onEdit={handleEditMarker}
-                      onSeek={seekTo}
-                      currentTime={currentTime}
-                      onAddMarker={addMarker}
-                    />
-                  </motion.div>
-                </div>
-              </>
-            ) : (
+          {/* Main area — player, analyzer, markers */}
+          {currentTrack && (
+            <div className="lg:col-span-2 space-y-6 order-3">
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="space-y-6"
+                transition={{ delay: 0.3 }}
               >
-                {/* Bienvenida */}
-                <div className="bg-slate-800 rounded-lg p-10 text-center">
-                  <Music2 className="mx-auto text-primary-400 mb-4" size={56} />
-                  <h2 className="text-2xl font-bold text-white mb-3">
-                    Bienvenid@ a Practice Room
-                  </h2>
-                  <p className="text-slate-400 max-w-lg mx-auto text-sm leading-relaxed">
-                    Practice Room es una herramienta para principiantes que quieren entender
-                    la estructura de sus canciones antes de mezclar. Carga tus pistas, identifica
-                    secciones clave como intros, drops o breaks, analiza BPM y tonalidad, y marca
-                    los puntos de entrada y salida para después construir mezclas más precisas.
-                  </p>
-                </div>
-
-                {/* Pasos de uso */}
-                <div className="bg-slate-800 rounded-lg p-6">
-                  <h3 className="text-white font-semibold mb-5 text-center">¿Cómo empezar?</h3>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {[
-                      {
-                        icon: <Upload size={20} className="text-primary-400" />,
-                        step: '1',
-                        title: 'Sube tu música',
-                        desc: 'Importa archivos MP3, WAV u otros formatos desde tu dispositivo usando el panel izquierdo.',
-                      },
-                      {
-                        icon: <Headphones size={20} className="text-primary-400" />,
-                        step: '2',
-                        title: 'Escucha y analiza',
-                        desc: 'Reproduce la pista y observa el análisis de BPM, tonalidad y estructura de la canción.',
-                      },
-                      {
-                        icon: <BookmarkPlus size={20} className="text-primary-400" />,
-                        step: '3',
-                        title: 'Marca los momentos clave',
-                        desc: 'Añade marcadores en los puntos importantes: drops, breaks, entradas o cualquier referencia.',
-                      },
-                      {
-                        icon: <BarChart2 size={20} className="text-primary-400" />,
-                        step: '4',
-                        title: 'Practica y mejora',
-                        desc: 'Usa el panel de aprendizaje para repasar conceptos de mezcla y perfeccionar tu técnica.',
-                      },
-                    ].map(({ icon, step, title, desc }) => (
-                      <div key={step} className="flex gap-4 p-4 bg-slate-700/50 rounded-lg">
-                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-slate-300 text-xs font-bold">
-                          {step}
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2 mb-1">
-                            {icon}
-                            <span className="text-white text-sm font-medium">{title}</span>
-                          </div>
-                          <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <AudioPlayer
+                  track={currentTrack}
+                  onTimeUpdate={setCurrentTime}
+                  onSeek={registerSeek}
+                />
               </motion.div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.5 }}
+                >
+                  <SongAnalyzer
+                    currentTime={currentTime}
+                    isPlaying={currentTrack !== null}
+                  />
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.4 }}
+                >
+                  <MarkerList
+                    markers={markers}
+                    onDelete={deleteMarker}
+                    onEdit={handleEditMarker}
+                    onSeek={seekTo}
+                    currentTime={currentTime}
+                    onAddMarker={addMarker}
+                  />
+                </motion.div>
+              </div>
+            </div>
+          )}
+
         </div>
       </main>
 
