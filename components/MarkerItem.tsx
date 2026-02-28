@@ -1,5 +1,13 @@
 'use client';
 
+/**
+ * @file components/MarkerItem.tsx
+ * Fila individual de un marcador dentro de MarkerList.
+ *
+ * Muestra: barra de color | tipo + tiempo clickeable | descripción educativa | nota | acciones
+ * El tiempo actúa como botón: al hacer clic llama a onSeek para mover el reproductor.
+ */
+
 import { motion } from 'framer-motion';
 import { Edit2, X } from 'lucide-react';
 

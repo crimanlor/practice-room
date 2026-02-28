@@ -1,5 +1,20 @@
 'use client';
 
+/**
+ * @file components/AudioPlayer.tsx
+ * Reproductor de audio principal. Integra WaveSurfer para la forma de onda.
+ *
+ * Delegaciones:
+ * - Toda la lógica de audio va a `useAudioPlayer`
+ * - Expone `seekTo` al `PlayerContext` vía la prop `onSeek`
+ * - Notifica cambios de `currentTime` al `PlayerContext` vía `onTimeUpdate`
+ *
+ * Estados visuales:
+ * - Cargando: spinner de texto mientras WaveSurfer decodifica
+ * - Error: mensaje inline con icono ⚠️
+ * - Listo: forma de onda + controles activos
+ */
+
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react';

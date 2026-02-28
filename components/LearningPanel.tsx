@@ -1,5 +1,18 @@
 'use client';
 
+/**
+ * @file components/LearningPanel.tsx
+ * Panel educativo con contenido sobre mezcla de música.
+ *
+ * Exports:
+ * - `LearningPanel`: el panel completo (lateral o pantalla completa)
+ * - `LearningButton`: botón del header que abre el panel
+ *
+ * Componentes internos:
+ * - `SectionItem`: acordeón para cada sección (prop `wideLayout` cambia el layout)
+ * - `LearningItemCard`: tarjeta con subtitle, descripción y lista de tips
+ */
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BookOpen, ChevronDown, ChevronRight, Maximize2, Minimize2, X } from 'lucide-react';

@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * @file components/SongAnalyzer.tsx
+ * Herramientas de análisis musical con tres pestañas:
+ *
+ * - **BPM**: tap tempo — el usuario toca al ritmo y se calcula el BPM promedio
+ * - **Metrónomo**: reproduce clics sintéticos (Web Audio API) a un BPM configurable
+ * - **Conteo**: visualizador de 4 tiempos del compás, sincronizado con el metrónomo
+ *
+ * El metrónomo usa `AudioContext` (Web Audio API), no archivos de audio.
+ * Se crea lazy para cumplir con las políticas del navegador (requiere gesto del usuario).
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Minus, Pause, Play, Plus, RotateCcw } from 'lucide-react';

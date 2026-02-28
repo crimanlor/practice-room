@@ -1,5 +1,13 @@
 'use client';
 
+/**
+ * @file components/TrackList.tsx
+ * Lista de tracks cargados. Permite seleccionar el activo y eliminar tracks.
+ *
+ * La eliminación requiere confirmación en un modal propio (sin confirm() nativo).
+ * El botón de eliminar es invisible por defecto y aparece al hacer hover (group-hover).
+ */
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Music, Trash2 } from 'lucide-react';

@@ -1,5 +1,18 @@
 'use client';
 
+/**
+ * @file components/FileUpload.tsx
+ * Zona de carga de archivos de audio. Soporta clic y drag & drop.
+ *
+ * Flujo al subir un archivo:
+ * 1. Valida que sea audio
+ * 2. Guarda el binario en IndexedDB (audioService.saveAudioFile)
+ * 3. Lee la duración real con un <Audio> temporal
+ * 4. Construye el objeto Track y llama a onTrackAdd
+ *
+ * Errores: se muestran inline (sin alert() nativo).
+ */
+
 import { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Music, AlertCircle } from 'lucide-react';

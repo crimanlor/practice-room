@@ -1,5 +1,16 @@
 'use client';
 
+/**
+ * @file components/MarkerList.tsx
+ * Lista de marcadores del track activo con formularios para añadir y editar.
+ *
+ * Contiene el componente interno `MarkerForm`, que funciona en dos modos:
+ * - inline (asModal=false): formulario expandible encima de la lista para añadir
+ * - modal (asModal=true): modal centrado con overlay para editar
+ *
+ * Usa `AnimatePresence` de Framer Motion para animar la entrada/salida del formulario.
+ */
+
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus } from 'lucide-react';

@@ -1,5 +1,17 @@
 'use client';
 
+/**
+ * @file hooks/useTracks.ts
+ * Hook que gestiona la lista de tracks y el track actualmente seleccionado.
+ *
+ * Responsabilidades:
+ * - Cargar tracks desde localStorage al montar
+ * - Limpiar tracks con blob: URLs inválidas de sesiones anteriores
+ * - CRUD de tracks (delegando persistencia a `trackService`)
+ * - Eliminar el archivo de audio al borrar un track (delegando a `audioService`)
+ * - Mantener `currentTrack` sincronizado cuando se actualiza o elimina
+ */
+
 import { useCallback, useEffect, useState } from 'react';
 import type { Track } from '@/types';
 import { trackService } from '@/services/trackService';

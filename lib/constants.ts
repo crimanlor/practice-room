@@ -1,3 +1,11 @@
+/**
+ * @file lib/constants.ts
+ * Constantes de presentación para los tipos de marcadores.
+ *
+ * Separadas de `types/index.ts` porque son valores de runtime (objetos JS),
+ * no tipos TypeScript. Los tipos no existen en el bundle final; las constantes sí.
+ */
+
 import type { MarkerType } from '@/types';
 
 /** Colores predefinidos para cada tipo de marcador */

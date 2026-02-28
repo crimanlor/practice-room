@@ -1,12 +1,28 @@
 'use client';
 
+/**
+ * @file hooks/useAudioPlayer.ts
+ * Hook que encapsula la integración con WaveSurfer.js.
+ *
+ * Responsabilidades:
+ * - Inicializar WaveSurfer una sola vez (Efecto 1, deps: [])
+ * - Cargar el audio correcto cada vez que cambia `audioUrl` (Efecto 2)
+ * - Resolver IDs de IndexedDB a blob URLs antes de pasarlos a WaveSurfer
+ * - Exponer controles: play/pause, seek, volumen, stop
+ * - Gestionar race conditions al cambiar de track rápidamente (loadIdRef)
+ * - Silenciar el error "signal is aborted" que WaveSurfer lanza al interrumpir una carga
+ * - Throttle de `timeupdate` a 100ms para limitar re-renders
+ */
+
 import { useCallback, useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import type { PlayerState } from '@/types';
 import { getAudioFile } from '@/services/audioService';
 
 interface UseAudioPlayerOptions {
+  /** ID del archivo en IndexedDB, o URL directa (blob:, http:, https:, data:) */
   audioUrl?: string;
+  /** Callback invocado cuando WaveSurfer termina de decodificar el audio y está listo */
   onReady?: (duration: number) => void;
 }
 
@@ -20,12 +36,19 @@ function isDirectUrl(url: string): boolean {
 }
 
 export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}) {
+  /** Ref al <div> donde WaveSurfer monta el canvas de la forma de onda */
   const waveformRef = useRef<HTMLDivElement | null>(null);
+  /** Instancia de WaveSurfer. Guardada en ref para no causar re-renders al cambiar */
   const wavesurferRef = useRef<WaveSurfer | null>(null);
+  /** Ref estable al callback onReady para evitar recrear efectos cuando cambia */
   const onReadyRef = useRef(onReady);
+  /** Blob URL de la carga anterior, para revocarla y liberar memoria */
   const currentBlobUrlRef = useRef<string | null>(null);
+  /** Evita que el Efecto 1 (init) se ejecute más de una vez */
   const isInitializedRef = useRef(false);
+  /** True mientras WaveSurfer está en proceso de decodificar/cargar */
   const isLoadingRef = useRef(false);
+  /** Timestamp de la última actualización de currentTime (throttle) */
   const lastTimeUpdateRef = useRef(0);
   /** Incrementado cada vez que se inicia una carga nueva. Permite cancelar llamadas async obsoletas. */
   const loadIdRef = useRef(0);

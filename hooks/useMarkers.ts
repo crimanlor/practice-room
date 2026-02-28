@@ -1,5 +1,18 @@
 'use client';
 
+/**
+ * @file hooks/useMarkers.ts
+ * Hook de gestión de marcadores en memoria (sin persistencia).
+ *
+ * Responsabilidades:
+ * - CRUD de marcadores en estado local de React
+ * - Mantener el array ordenado por tiempo en todo momento
+ * - Recalcular el color del marcador si se cambia el tipo
+ *
+ * La persistencia en localStorage es responsabilidad de `useTrackMarkers`,
+ * que envuelve este hook.
+ */
+
 import { useCallback, useState } from 'react';
 import type { Marker, MarkerType } from '@/types';
 import { MARKER_COLORS } from '@/lib/constants';

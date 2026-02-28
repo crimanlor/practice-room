@@ -1,10 +1,23 @@
 'use client';
 
 /**
- * useTrackMarkers coordina la sincronización bidireccional entre
- * el estado local de marcadores (useMarkers) y la persistencia del track (useTracks).
+ * @file hooks/useTrackMarkers.ts
+ * Hook que sincroniza los marcadores en memoria con la persistencia del track.
  *
- * Elimina la lógica duplicada que estaba en page.tsx.
+ * Combina:
+ * - `useMarkers`: gestión de marcadores en estado React (rápida, en memoria)
+ * - `useTracks.updateTrack`: persistencia en localStorage (vía trackService)
+ *
+ * Al cambiar de track (`currentTrack.id`), reemplaza los marcadores en memoria
+ * con los del nuevo track automáticamente.
+ *
+ * Uso en `page.tsx`:
+ * ```ts
+ * const { markers, addMarker, updateMarker, deleteMarker } = useTrackMarkers({
+ *   currentTrack,
+ *   updateTrack,
+ * });
+ * ```
  */
 
 import { useEffect } from 'react';
