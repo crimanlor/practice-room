@@ -27,6 +27,8 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
   const isInitializedRef = useRef(false);
   const isLoadingRef = useRef(false);
   const lastTimeUpdateRef = useRef(0);
+  /** Incrementado cada vez que se inicia una carga nueva. Permite cancelar llamadas async obsoletas. */
+  const loadIdRef = useRef(0);
 
   const [playerState, setPlayerState] = useState<PlayerState>({
     isPlaying: false,
@@ -46,6 +48,10 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
     const ws = wavesurferRef.current;
     if (!ws) return;
 
+    // Capturar el ID de esta carga. Si llega otra carga antes de que ésta termine,
+    // loadIdRef.current habrá cambiado y sabremos que somos una carga obsoleta.
+    const myLoadId = ++loadIdRef.current;
+
     // Revocar blob URL anterior para liberar memoria
     if (currentBlobUrlRef.current) {
       URL.revokeObjectURL(currentBlobUrlRef.current);
@@ -63,6 +69,8 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
         await ws.load(url);
       } else {
         const blobUrl = await getAudioFile(url);
+        // Si mientras esperábamos el IndexedDB ya se solicitó otra carga, abandonar
+        if (myLoadId !== loadIdRef.current) return;
         if (blobUrl) {
           currentBlobUrlRef.current = blobUrl;
           await ws.load(blobUrl);
@@ -72,13 +80,15 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
         }
       }
     } catch (err) {
+      // Ignorar el abort que WaveSurfer lanza cuando se interrumpe una carga anterior
+      if (myLoadId !== loadIdRef.current) return;
       console.error('[useAudioPlayer] Error loading audio:', err);
       isLoadingRef.current = false;
       setError('Error al cargar audio');
     }
   }, []);
 
-  // Inicializar WaveSurfer una sola vez y cargar audio cuando el contenedor esté listo
+  // Efecto 1: Inicializar WaveSurfer una sola vez cuando el contenedor está listo
   useEffect(() => {
     function tryInit() {
       if (isInitializedRef.current) return;
@@ -134,35 +144,53 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
       );
 
       ws.on('error', (err: Error) => {
+        // WaveSurfer lanza "signal is aborted" cuando se interrumpe una carga
+        // para iniciar otra. No es un error real — ignorarlo.
+        if (err?.message?.toLowerCase().includes('aborted')) return;
         console.error('[useAudioPlayer] WaveSurfer error:', err);
         isLoadingRef.current = false;
         setError('Error al cargar el audio');
         setIsReady(false);
       });
-
-      if (audioUrl) {
-        isLoadingRef.current = true;
-        loadAudio(audioUrl);
-      } else {
-        setIsReady(true);
-      }
-
-      return () => {
-        setTimeout(() => {
-          try {
-            if (ws.isPlaying()) ws.pause();
-            ws.destroy();
-          } catch {
-            // ignorar errores en cleanup
-          }
-          wavesurferRef.current = null;
-          isInitializedRef.current = false;
-        }, 0);
-      };
     }
 
     tryInit();
+
+    return () => {
+      setTimeout(() => {
+        try {
+          if (wavesurferRef.current?.isPlaying()) wavesurferRef.current.pause();
+          wavesurferRef.current?.destroy();
+        } catch {
+          // ignorar errores en cleanup
+        }
+        wavesurferRef.current = null;
+        isInitializedRef.current = false;
+      }, 0);
+    };
+    // Solo se ejecuta al montar/desmontar
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Efecto 2: Cargar audio cuando cambia audioUrl (incluyendo cambio de track)
+  useEffect(() => {
+    if (!audioUrl) {
+      setIsReady(true);
+      return;
+    }
+
+    // Si WaveSurfer aún no está listo, esperar
+    if (!wavesurferRef.current) {
+      const interval = setInterval(() => {
+        if (wavesurferRef.current) {
+          clearInterval(interval);
+          loadAudio(audioUrl);
+        }
+      }, 50);
+      return () => clearInterval(interval);
+    }
+
+    loadAudio(audioUrl);
   }, [audioUrl, loadAudio]);
 
   const togglePlayPause = useCallback(() => {
