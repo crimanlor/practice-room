@@ -14,7 +14,7 @@ El hook más complejo del proyecto. Encapsula toda la integración con **WaveSur
 
 ```ts
 interface UseAudioPlayerOptions {
-  audioUrl?: string;    // ID del track en IndexedDB (o URL directa)
+  audioUrl?: string;    // ID del track en IndexedDB (o URL directa blob:/http:/https:)
   onReady?: (duration: number) => void;  // callback cuando el audio está listo
 }
 ```
@@ -36,59 +36,70 @@ interface UseAudioPlayerOptions {
 
 ### Cómo funciona internamente
 
-El hook usa **dos efectos separados** (esto es importante y no accidental):
+El hook usa **un único efecto** con `deps: [audioUrl]`. Cada vez que el track cambia, el efecto anterior se limpia (destroy de WaveSurfer) y el nuevo crea una instancia fresca.
 
-#### Efecto 1: inicialización de WaveSurfer (se ejecuta solo al montar)
-
-```ts
-useEffect(() => {
-  // Crea la instancia de WaveSurfer y la conecta al <div>
-  // Registra todos los eventos: ready, play, pause, timeupdate, finish, error
-  // Se ejecuta una sola vez (deps: [])
-}, []);
+```
+audioUrl cambia
+      │
+      ▼
+cleanup: cancelled=true, ws.destroy(), URL.revokeObjectURL()
+      │
+      ▼
+nuevo efecto: WaveSurfer.create() → getAudioFile() → ws.load()
+      │
+      ▼
+evento 'ready' → setIsReady(true)
 ```
 
-Crear WaveSurfer es caro (configura un AudioContext, un canvas…). Si lo recreáramos cada vez que cambia el track, sería lento y causaría parpadeos.
+#### ¿Por qué un solo efecto?
 
-#### Efecto 2: carga de audio (se ejecuta cuando cambia `audioUrl`)
+La arquitectura anterior usaba dos efectos separados (uno para init, otro para carga) coordinados mediante refs globales (`isInitializedRef`, `loadIdRef`). Eso era frágil porque React **StrictMode** desmonta y vuelve a montar los componentes en desarrollo para detectar efectos secundarios incorrectos. Con refs globales, el segundo montaje podía encontrar estado residual del primero y no inicializar WaveSurfer correctamente.
 
-```ts
-useEffect(() => {
-  // Llama a loadAudio(audioUrl) cuando cambia la URL
-  // Si WaveSurfer todavía no está montado, espera en un setInterval de 50ms
-}, [audioUrl, loadAudio]);
+Con un único efecto:
+- Todo el estado (`ws`, `cancelled`, `blobUrlToRevoke`) vive en **variables locales del efecto**, no en refs compartidas entre montajes.
+- El cleanup siempre deja un estado limpio: el siguiente efecto nunca ve residuos del anterior.
+- Es el patrón que React recomienda para recursos que tienen un ciclo de vida acoplado.
+
+#### La función `init()` (interna al efecto)
+
+1. Comprueba que el contenedor DOM (`waveformRef.current`) está disponible
+2. Crea la instancia de WaveSurfer y la registra en `wavesurferRef` para que los controles puedan usarla
+3. Registra los eventos: `ready`, `play`, `pause`, `timeupdate`, `finish`, `error` — todos protegidos con `if (cancelled) return`
+4. Resuelve la URL:
+   - Si es directa (`blob:`, `http:`, `https:`), la usa tal cual
+   - Si es un ID de IndexedDB, llama a `getAudioFile(id)` para obtener la blob URL
+5. Llama a `ws.load(resolvedUrl)`
+
+#### ¿Cómo se gestionan las race conditions?
+
+Si el usuario cambia de track mientras `getAudioFile` está en curso (operación async):
+
+```
+init() para track-1 → await getAudioFile("track-1") ...
+  (usuario selecciona track-2)
+  cleanup de track-1: cancelled = true
+  nuevo init() para track-2 empieza
+getAudioFile("track-1") resuelve → if (cancelled) return  ✓
 ```
 
-#### La función `loadAudio`
+El flag `cancelled` es local al efecto. No hay contadores globales ni comparaciones de IDs — simplemente: si el efecto fue limpiado antes de que terminara la operación async, se cancela en silencio.
 
-1. Incrementa `loadIdRef.current` (el "ID de carga")
-2. Revoca la blob URL anterior para liberar memoria
-3. Si la URL es directa (`blob:`, `http:`…), llama a `ws.load(url)` directamente
-4. Si la URL es un ID de IndexedDB, primero llama a `getAudioFile(id)` para obtener la blob URL, luego llama a `ws.load(blobUrl)`
+#### ¿Por qué se ignoran los errores "aborted"?
 
-#### ¿Por qué existe `loadIdRef`?
+WaveSurfer llama a `fetch(blobUrl, { signal })` internamente con un `AbortController`. Cuando se destruye la instancia (cleanup), llama a `abort()`, lo que hace que `fetch` rechace con un `DOMException` de tipo `AbortError`. Este error también puede propagarse al `catch` del `await ws.load()`.
 
-Es una solución a una **race condition**: si el usuario cambia de track muy rápido, puede pasar que:
-
-1. Se lanza `loadAudio("track-1")` → empieza a buscar en IndexedDB
-2. Antes de que termine, se lanza `loadAudio("track-2")`
-3. `loadAudio("track-1")` termina y llama a `ws.load(blob-de-track-1)` → **incorrecto**, ya deberíamos estar en track-2
-
-Con `loadIdRef`:
-- Cada llamada a `loadAudio` captura `const myLoadId = ++loadIdRef.current`
-- Antes de usar el resultado de IndexedDB, comprueba: `if (myLoadId !== loadIdRef.current) return;`
-- Si la comprobación falla, significa que ya hay una carga más reciente → simplemente no hace nada
-
-#### ¿Por qué el `error` handler ignora "aborted"?
-
-Cuando llamas a `ws.load()` mientras hay una carga en curso, WaveSurfer aborta internamente el fetch anterior y emite un error de tipo "signal is aborted without reason". No es un error real (es el comportamiento esperado), así que lo filtramos:
+No es un error real — es el comportamiento esperado del cleanup. Se filtra con:
 
 ```ts
-ws.on('error', (err: Error) => {
-  if (err?.message?.toLowerCase().includes('aborted')) return;
-  // ...
-});
+function isAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  if (err.name === 'AbortError') return true;           // DOMException estándar
+  if (err.message.toLowerCase().includes('aborted')) return true; // fallback cross-browser
+  return false;
+}
 ```
+
+La comprobación usa `err.name` (no solo el mensaje) porque el mensaje varía entre navegadores, pero `name === 'AbortError'` es parte del estándar DOM.
 
 ### Throttle de `timeupdate`
 
@@ -96,7 +107,7 @@ WaveSurfer emite el evento `timeupdate` muchas veces por segundo. Si cada evento
 
 ```ts
 const TIME_UPDATE_THROTTLE_MS = 100;
-// Solo actualiza el estado si han pasado al menos 100ms desde la última vez
+// Solo actualiza el estado si han pasado al menos 100ms desde la última actualización
 ```
 
 ---
