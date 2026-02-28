@@ -24,7 +24,7 @@ import { LEARNING_CONTENT } from '@/lib/learningContent';
 
 function LearningItemCard({ item }: { item: LearningItem }) {
   return (
-    <div className="bg-slate-800/50 rounded-lg p-4 h-fit">
+    <div className="bg-slate-800/50 rounded-lg p-4">
       <h4 className="font-semibold text-primary-400 text-sm mb-2">{item.subtitle}</h4>
       <p className="text-slate-300 text-sm leading-relaxed mb-3">{item.description}</p>
       {item.tips && item.tips.length > 0 && (
@@ -96,13 +96,7 @@ function SectionItem({ section, wideLayout = false }: SectionItemProps) {
             className="overflow-hidden"
           >
             <div className={wideLayout ? 'px-6 pb-6 pt-2' : 'px-4 pb-4 pt-2'}>
-              <div
-                className={
-                  wideLayout
-                    ? 'grid grid-cols-1 md:grid-cols-2 gap-6'
-                    : 'space-y-4'
-                }
-              >
+              <div className="space-y-3">
                 {section.content.map((item, i) => (
                   <LearningItemCard key={i} item={item} />
                 ))}
