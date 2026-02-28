@@ -20,7 +20,7 @@ import type { PlayerState } from '@/types';
 import { getAudioFile } from '@/services/audioService';
 
 interface UseAudioPlayerOptions {
-  /** ID del archivo en IndexedDB, o URL directa (blob:, http:, https:, data:) */
+  /** ID del archivo en IndexedDB, o URL directa (blob:, http:, https:) */
   audioUrl?: string;
   /** Callback invocado cuando WaveSurfer termina de decodificar el audio y está listo */
   onReady?: (duration: number) => void;
@@ -29,7 +29,17 @@ interface UseAudioPlayerOptions {
 /** Tiempo mínimo (ms) entre actualizaciones de currentTime para limitar re-renders. */
 const TIME_UPDATE_THROTTLE_MS = 100;
 
-const DIRECT_URL_PREFIXES = ['blob:', 'http:', 'https:', 'data:'];
+const DIRECT_URL_PREFIXES = ['blob:', 'http:', 'https:'];
+
+/** Devuelve true si el error es una interrupción intencional de fetch/WaveSurfer (no un error real). */
+function isAbortError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  // DOMException lanzado por fetch() cuando se llama AbortController.abort()
+  if (err.name === 'AbortError') return true;
+  // Mensaje alternativo que WaveSurfer propaga en algunos navegadores
+  if (err.message.toLowerCase().includes('aborted')) return true;
+  return false;
+}
 
 function isDirectUrl(url: string): boolean {
   return DIRECT_URL_PREFIXES.some((prefix) => url.startsWith(prefix));
@@ -69,11 +79,13 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
 
   const loadAudio = useCallback(async (url: string) => {
     const ws = wavesurferRef.current;
+    console.log('[loadAudio] called, ws=', !!ws, 'url=', url);
     if (!ws) return;
 
     // Capturar el ID de esta carga. Si llega otra carga antes de que ésta termine,
     // loadIdRef.current habrá cambiado y sabremos que somos una carga obsoleta.
     const myLoadId = ++loadIdRef.current;
+    console.log('[loadAudio] myLoadId=', myLoadId);
 
     // Revocar blob URL anterior para liberar memoria
     if (currentBlobUrlRef.current) {
@@ -89,21 +101,35 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
 
     try {
       if (isDirectUrl(url)) {
+        console.log('[loadAudio] direct URL, calling ws.load');
         await ws.load(url);
+        console.log('[loadAudio] ws.load resolved (direct)');
       } else {
+        console.log('[loadAudio] IndexedDB lookup for id=', url);
         const blobUrl = await getAudioFile(url);
+        console.log('[loadAudio] blobUrl=', blobUrl, 'myLoadId=', myLoadId, 'current=', loadIdRef.current);
         // Si mientras esperábamos el IndexedDB ya se solicitó otra carga, abandonar
-        if (myLoadId !== loadIdRef.current) return;
+        if (myLoadId !== loadIdRef.current) {
+          console.log('[loadAudio] stale load, aborting');
+          return;
+        }
         if (blobUrl) {
           currentBlobUrlRef.current = blobUrl;
+          console.log('[loadAudio] calling ws.load with blobUrl');
           await ws.load(blobUrl);
+          console.log('[loadAudio] ws.load resolved (blob)');
         } else {
           isLoadingRef.current = false;
           setError('Archivo no encontrado');
         }
       }
     } catch (err) {
-      // Ignorar el abort que WaveSurfer lanza cuando se interrumpe una carga anterior
+      // Interrupción intencional (nueva carga canceló la anterior) — no es un error real.
+      if (isAbortError(err)) {
+        console.log('[loadAudio] abort error (expected), ignoring');
+        return;
+      }
+      // Si ya se inició una carga más reciente, esta es obsoleta — ignorar su error también.
       if (myLoadId !== loadIdRef.current) return;
       console.error('[useAudioPlayer] Error loading audio:', err);
       isLoadingRef.current = false;
@@ -113,10 +139,12 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
 
   // Efecto 1: Inicializar WaveSurfer una sola vez cuando el contenedor está listo
   useEffect(() => {
+    let rafHandle: number | null = null;
+
     function tryInit() {
       if (isInitializedRef.current) return;
       if (!waveformRef.current) {
-        requestAnimationFrame(tryInit);
+        rafHandle = requestAnimationFrame(tryInit);
         return;
       }
 
@@ -138,7 +166,7 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
       wavesurferRef.current = ws;
 
       ws.on('ready', () => {
-        if (!isLoadingRef.current) return;
+        console.log('[WaveSurfer] ready event fired, duration=', ws.getDuration());
         isLoadingRef.current = false;
         const duration = ws.getDuration();
         setPlayerState((prev) => ({ ...prev, duration }));
@@ -167,10 +195,12 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
       );
 
       ws.on('error', (err: Error) => {
-        // WaveSurfer lanza "signal is aborted" cuando se interrumpe una carga
-        // para iniciar otra. No es un error real — ignorarlo.
-        if (err?.message?.toLowerCase().includes('aborted')) return;
-        console.error('[useAudioPlayer] WaveSurfer error:', err);
+        // Interrupción intencional (nueva carga canceló la anterior) — no es un error real.
+        if (isAbortError(err)) {
+          console.log('[WaveSurfer] error event (abort, ignored):', err.name, err.message);
+          return;
+        }
+        console.error('[WaveSurfer] error event:', err.name, err.message, err);
         isLoadingRef.current = false;
         setError('Error al cargar el audio');
         setIsReady(false);
@@ -180,16 +210,25 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
     tryInit();
 
     return () => {
-      setTimeout(() => {
-        try {
-          if (wavesurferRef.current?.isPlaying()) wavesurferRef.current.pause();
-          wavesurferRef.current?.destroy();
-        } catch {
-          // ignorar errores en cleanup
-        }
-        wavesurferRef.current = null;
-        isInitializedRef.current = false;
-      }, 0);
+      // Cancelar el RAF si el componente se desmonta antes de que el DOM esté listo
+      if (rafHandle !== null) cancelAnimationFrame(rafHandle);
+
+      // Revocar la blob URL activa para liberar memoria
+      if (currentBlobUrlRef.current) {
+        URL.revokeObjectURL(currentBlobUrlRef.current);
+        currentBlobUrlRef.current = null;
+      }
+
+      // Destruir WaveSurfer sincrónicamente para que el remount de StrictMode
+      // encuentre wavesurferRef.current === null y pueda reinicializar correctamente.
+      try {
+        if (wavesurferRef.current?.isPlaying()) wavesurferRef.current.pause();
+        wavesurferRef.current?.destroy();
+      } catch {
+        // ignorar errores en cleanup
+      }
+      wavesurferRef.current = null;
+      isInitializedRef.current = false;
     };
     // Solo se ejecuta al montar/desmontar
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -197,6 +236,7 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
 
   // Efecto 2: Cargar audio cuando cambia audioUrl (incluyendo cambio de track)
   useEffect(() => {
+    console.log('[Efecto2] audioUrl=', audioUrl, 'ws=', !!wavesurferRef.current);
     if (!audioUrl) {
       setIsReady(true);
       return;
@@ -204,8 +244,10 @@ export function useAudioPlayer({ audioUrl, onReady }: UseAudioPlayerOptions = {}
 
     // Si WaveSurfer aún no está listo, esperar
     if (!wavesurferRef.current) {
+      console.log('[Efecto2] WaveSurfer not ready yet, polling...');
       const interval = setInterval(() => {
         if (wavesurferRef.current) {
+          console.log('[Efecto2] WaveSurfer now ready, loading');
           clearInterval(interval);
           loadAudio(audioUrl);
         }

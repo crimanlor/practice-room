@@ -34,7 +34,23 @@ export async function saveAudioFile(id: string, file: Blob): Promise<void> {
     const store = tx.objectStore(STORE_NAME);
     const req = store.put(file, id);
     req.onsuccess = () => resolve();
-    req.onerror = () => reject(req.error);
+    req.onerror = () => {
+      const err = req.error;
+      // IndexedDB lanza QuotaExceededError cuando el almacenamiento está lleno
+      if (
+        err?.name === 'QuotaExceededError' ||
+        err?.name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      ) {
+        reject(
+          new Error(
+            'No hay espacio suficiente en el almacenamiento del navegador. ' +
+            'Elimina algunos tracks para liberar espacio e inténtalo de nuevo.',
+          ),
+        );
+      } else {
+        reject(err);
+      }
+    };
   });
 }
 

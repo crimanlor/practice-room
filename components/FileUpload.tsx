@@ -27,8 +27,21 @@ interface FileUploadProps {
 
 const ACCEPTED_TYPES = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/x-m4a'];
 
+/** Tamaño máximo permitido por archivo (200 MB) */
+const MAX_FILE_SIZE_BYTES = 200 * 1024 * 1024;
+
 function isAudioFile(file: File): boolean {
   return file.type.startsWith('audio/') || ACCEPTED_TYPES.includes(file.type);
+}
+
+/** Devuelve true si el error es un QuotaExceededError de IndexedDB/Storage */
+function isQuotaError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === 'QuotaExceededError' ||
+    err.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+    err.message.toLowerCase().includes('quota')
+  );
 }
 
 /**
@@ -44,6 +57,13 @@ export function FileUpload({ onTrackAdd }: FileUploadProps) {
   async function handleFile(file: File) {
     if (!isAudioFile(file)) {
       setUploadError('Por favor selecciona un archivo de audio válido (MP3, WAV, OGG, M4A)');
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      setUploadError(
+        `El archivo es demasiado grande. El tamaño máximo permitido es 200 MB (el archivo pesa ${(file.size / 1024 / 1024).toFixed(1)} MB).`,
+      );
       return;
     }
 
@@ -79,9 +99,16 @@ export function FileUpload({ onTrackAdd }: FileUploadProps) {
       });
     } catch (err) {
       console.error('[FileUpload] Error al procesar archivo:', err);
-      setUploadError(
-        err instanceof Error ? err.message : 'Error al procesar el archivo',
-      );
+      if (isQuotaError(err)) {
+        setUploadError(
+          'No hay espacio suficiente en el almacenamiento del navegador. ' +
+          'Elimina algunos tracks para liberar espacio e inténtalo de nuevo.',
+        );
+      } else {
+        setUploadError(
+          err instanceof Error ? err.message : 'Error al procesar el archivo',
+        );
+      }
     } finally {
       setIsProcessing(false);
       // Limpiar el input para permitir re-subir el mismo archivo
@@ -150,7 +177,7 @@ export function FileUpload({ onTrackAdd }: FileUploadProps) {
             </p>
             <p className="text-slate-500 text-sm">o haz clic para seleccionar</p>
             <p className="text-slate-600 text-xs mt-2">
-              Formatos soportados: MP3, WAV, OGG, M4A
+              Formatos soportados: MP3, WAV, OGG, M4A · Máx. 200 MB
             </p>
           </div>
         )}

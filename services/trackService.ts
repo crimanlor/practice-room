@@ -15,12 +15,35 @@ import type { Track, Marker } from '@/types';
 /** Clave bajo la que se guarda el array de tracks en localStorage */
 const STORAGE_KEY = 'practice-room-tracks';
 
+/**
+ * Valida en runtime que un valor desconocido tiene la forma mínima de un `Track`.
+ * No usa zod ni librerías externas para mantener el bundle ligero.
+ */
+function isValidTrack(value: unknown): value is Track {
+  if (!value || typeof value !== 'object') return false;
+  const t = value as Record<string, unknown>;
+  return (
+    typeof t.id === 'string' &&
+    t.id.length > 0 &&
+    typeof t.name === 'string' &&
+    typeof t.file_url === 'string' &&
+    typeof t.duration === 'number' &&
+    Array.isArray(t.markers) &&
+    typeof t.createdAt === 'number' &&
+    typeof t.updatedAt === 'number'
+  );
+}
+
 /** Lee y parsea el array de tracks desde localStorage. Devuelve [] ante cualquier error. */
 function readFromStorage(): Track[] {
   if (typeof window === 'undefined') return [];
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? (JSON.parse(raw) as Track[]) : [];
+    if (!raw) return [];
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    // Filtrar entradas corruptas silenciosamente en lugar de romper la app
+    return parsed.filter(isValidTrack);
   } catch {
     return [];
   }

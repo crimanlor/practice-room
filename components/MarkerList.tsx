@@ -104,6 +104,7 @@ function MarkerForm({
           onChange={(e) => setNote(e.target.value)}
           placeholder="Añade una nota sobre este momento..."
           rows={asModal ? 3 : 2}
+          maxLength={500}
           className="w-full px-3 py-2 bg-slate-600 text-white rounded-lg
                      placeholder-slate-400 focus:outline-none focus:ring-2
                      focus:ring-primary-500 resize-none"
