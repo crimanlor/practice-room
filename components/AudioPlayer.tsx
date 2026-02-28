@@ -64,22 +64,27 @@ export function AudioPlayer({ track, onReady, onTimeUpdate, onSeek }: AudioPlaye
 
       {/* Forma de onda */}
       <div className="mb-6 bg-slate-900 rounded-lg p-4">
-        <div ref={waveformRef} className="w-full" />
-        {!isReady && !error && (
-          <div className="flex items-center justify-center h-[100px]">
-            <p className="text-slate-400">Cargando audio...</p>
-          </div>
-        )}
-        {error && (
-          <div className="flex items-center justify-center h-[100px] text-center">
-            <div>
-              <p className="font-semibold text-red-400 mb-1">⚠️ {error}</p>
-              <p className="text-sm text-slate-400">
-                Elimina este track y sube el archivo nuevamente
-              </p>
+        {/* Contenedor de altura fija: waveform + overlays ocupan el mismo espacio */}
+        <div className="relative h-[100px]">
+          <div ref={waveformRef} className="absolute inset-0" />
+
+          {!isReady && !error && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="text-slate-400 text-sm">Cargando audio...</p>
             </div>
-          </div>
-        )}
+          )}
+
+          {error && (
+            <div className="absolute inset-0 flex items-center justify-center text-center">
+              <div>
+                <p className="font-semibold text-red-400 mb-1">⚠️ {error}</p>
+                <p className="text-sm text-slate-400">
+                  Elimina este track y sube el archivo nuevamente
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Controles */}
