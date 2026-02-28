@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Practice Room - Aprende a Pinchar Música",
-  description: "Una aplicación educativa para practicar y aprender a pinchar música, con marcadores y análisis de tracks.",
+  title: "Practice Room - Aprende a mezclar Música",
+  description: "Una aplicación educativa para practicar y aprender a mezclar música, con marcadores y análisis de tracks.",
   keywords: ["DJ", "música", "práctica", "educación", "mezclas"],
 };
 

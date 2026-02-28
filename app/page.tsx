@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Music2 } from 'lucide-react';
+import { Music2, Upload, Headphones, BookmarkPlus, BarChart2 } from 'lucide-react';
 
 import { useTracks } from '@/hooks/useTracks';
 import { useTrackMarkers } from '@/hooks/useTrackMarkers';
@@ -51,7 +51,7 @@ function MainContent() {
               <Music2 className="text-primary-400" size={32} />
               <div>
                 <h1 className="text-2xl font-bold text-white">Practice Room</h1>
-                <p className="text-slate-400 text-sm">Aprende a pinchar música</p>
+                <p className="text-slate-400 text-sm">Analiza la estructura de tus canciones antes de mezclar</p>
               </div>
             </div>
             <LearningButton onClick={() => setShowLearningPanel(true)} />
@@ -140,16 +140,67 @@ function MainContent() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="bg-slate-800 rounded-lg p-12 text-center"
+                className="space-y-6"
               >
-                <Music2 className="mx-auto text-slate-600 mb-4" size={64} />
-                <h2 className="text-2xl font-bold text-white mb-2">
-                  Bienvenido a Practice Room
-                </h2>
-                <p className="text-slate-400 max-w-md mx-auto">
-                  Sube un archivo de audio o selecciona un track de tu biblioteca
-                  para comenzar a practicar y marcar momentos importantes.
-                </p>
+                {/* Bienvenida */}
+                <div className="bg-slate-800 rounded-lg p-10 text-center">
+                  <Music2 className="mx-auto text-primary-400 mb-4" size={56} />
+                  <h2 className="text-2xl font-bold text-white mb-3">
+                    Bienvenid@ a Practice Room
+                  </h2>
+                  <p className="text-slate-400 max-w-lg mx-auto text-sm leading-relaxed">
+                    Practice Room es una herramienta para principiantes que quieren entender
+                    la estructura de sus canciones antes de mezclar. Carga tus pistas, identifica
+                    secciones clave como intros, drops o breaks, analiza BPM y tonalidad, y marca
+                    los puntos de entrada y salida para después construir mezclas más precisas.
+                  </p>
+                </div>
+
+                {/* Pasos de uso */}
+                <div className="bg-slate-800 rounded-lg p-6">
+                  <h3 className="text-white font-semibold mb-5 text-center">¿Cómo empezar?</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {[
+                      {
+                        icon: <Upload size={20} className="text-primary-400" />,
+                        step: '1',
+                        title: 'Sube tu música',
+                        desc: 'Importa archivos MP3, WAV u otros formatos desde tu dispositivo usando el panel izquierdo.',
+                      },
+                      {
+                        icon: <Headphones size={20} className="text-primary-400" />,
+                        step: '2',
+                        title: 'Escucha y analiza',
+                        desc: 'Reproduce la pista y observa el análisis de BPM, tonalidad y estructura de la canción.',
+                      },
+                      {
+                        icon: <BookmarkPlus size={20} className="text-primary-400" />,
+                        step: '3',
+                        title: 'Marca los momentos clave',
+                        desc: 'Añade marcadores en los puntos importantes: drops, breaks, entradas o cualquier referencia.',
+                      },
+                      {
+                        icon: <BarChart2 size={20} className="text-primary-400" />,
+                        step: '4',
+                        title: 'Practica y mejora',
+                        desc: 'Usa el panel de aprendizaje para repasar conceptos de mezcla y perfeccionar tu técnica.',
+                      },
+                    ].map(({ icon, step, title, desc }) => (
+                      <div key={step} className="flex gap-4 p-4 bg-slate-700/50 rounded-lg">
+                        <div className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-600 flex items-center justify-center text-slate-300 text-xs font-bold">
+                          {step}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 mb-1">
+                            {icon}
+                            <span className="text-white text-sm font-medium">{title}</span>
+                          </div>
+                          <p className="text-slate-400 text-xs leading-relaxed">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </motion.div>
             )}
           </div>
@@ -158,7 +209,17 @@ function MainContent() {
 
       <footer className="border-t border-slate-700 mt-12 bg-slate-900/50">
         <div className="container mx-auto px-4 py-6 text-center text-slate-500 text-sm">
-          <p>Practice Room - Una herramienta educativa para aprender a pinchar música</p>
+          <p className="mt-1">
+            Desarrollado por{" "}
+            <a
+              href="https://github.com/crimanlor"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-slate-400 hover:text-white transition-colors"
+            >
+              Lorena Criado.
+            </a>
+          </p>
         </div>
       </footer>
     </div>

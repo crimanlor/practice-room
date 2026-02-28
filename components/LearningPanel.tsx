@@ -143,8 +143,8 @@ export function LearningPanel({
         <div className="flex items-center gap-3">
           <BookOpen className="text-primary-400" size={24} />
           <div>
-            <h2 className="text-lg font-bold text-white">Aprende a Mezclar</h2>
-            <p className="text-xs text-slate-400">Guía para DJs principiantes</p>
+            <h2 className="text-lg font-bold text-white">Recursos</h2>
+            <p className="text-xs text-slate-400">Para DJs principiantes</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -187,7 +187,7 @@ export function LearningPanel({
       {/* Footer */}
       <div className="p-4 border-t border-slate-700 bg-slate-800/30">
         <p className="text-xs text-slate-500 text-center">
-          Consejo: Usa los marcadores para marcar las secciones de cada canción y practicar transiciones.
+          Consejo: Usa los marcadores para marcar las secciones de cada canción y entender mejor su estructura.
         </p>
       </div>
     </motion.div>
@@ -209,7 +209,7 @@ export function LearningButton({ onClick }: LearningButtonProps) {
                  text-sm font-medium transition-colors"
     >
       <BookOpen size={18} />
-      Aprende a mezclar
+      Recursos
     </button>
   );
 }
