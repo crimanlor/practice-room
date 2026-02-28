@@ -10,14 +10,15 @@ interface UseAudioPlayerProps {
   onReady?: (duration: number) => void;
 }
 
-/**
- * Hook para manejar el reproductor de audio con WaveSurfer
- * Maneja la reproducción, pausa, seek y visualización de waveform
- */
+const THROTTLE_MS = 100;
+
 export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) => {
   const waveformRef = useRef<HTMLDivElement | null>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
   const onReadyRef = useRef(onReady);
+  const currentBlobUrlRef = useRef<string | null>(null);
+  const isInitializedRef = useRef(false);
+  const isLoadingRef = useRef(false);
   
   const [playerState, setPlayerState] = useState<PlayerState>({
     isPlaying: false,
@@ -28,157 +29,167 @@ export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) 
 
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const lastTimeUpdateRef = useRef<number>(0);
 
   // Actualizar ref cuando cambia onReady
   useEffect(() => {
     onReadyRef.current = onReady;
   }, [onReady]);
 
-  /**
-   * Inicializa WaveSurfer cuando el contenedor está disponible
-   */
-  useEffect(() => {
-    if (!waveformRef.current) return;
-
-    // Crear instancia de WaveSurfer
-    const wavesurfer = WaveSurfer.create({
-      container: waveformRef.current,
-      waveColor: '#94a3b8',
-      progressColor: '#0ea5e9',
-      cursorColor: '#ef4444',
-      barWidth: 2,
-      barGap: 1,
-      barRadius: 2,
-      height: 100,
-      normalize: true,
-      backend: 'WebAudio',
-    });
-
-    wavesurferRef.current = wavesurfer;
-
-    // Event listeners
-    wavesurfer.on('ready', () => {
-      const duration = wavesurfer.getDuration();
-      setPlayerState(prev => ({ ...prev, duration }));
-      setIsReady(true);
-      setError(null); // Limpiar errores previos
-      onReadyRef.current?.(duration);
-    });
-
-    wavesurfer.on('play', () => {
-      setPlayerState(prev => ({ ...prev, isPlaying: true }));
-    });
-
-    wavesurfer.on('pause', () => {
-      setPlayerState(prev => ({ ...prev, isPlaying: false }));
-    });
-
-    wavesurfer.on('timeupdate', (currentTime: number) => {
-      setPlayerState(prev => ({ ...prev, currentTime }));
-    });
-
-    wavesurfer.on('finish', () => {
-      setPlayerState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
-    });
-
-    // Cleanup
-    return () => {
-      // Detener reproducción primero
-      try {
-        if (wavesurfer.isPlaying()) {
-          wavesurfer.pause();
-        }
-      } catch (error) {
-        // Ignorar
-      }
-
-      // Destruir después de un pequeño delay para permitir que termine cualquier operación
-      setTimeout(() => {
-        try {
-          wavesurfer.destroy();
-        } catch (error) {
-          // Ignorar errores de cleanup
-        }
-      }, 0);
-    };
-  }, []); // Sin dependencias - solo se crea una vez
-
-  /**
-   * Cargar audio cuando cambia la URL
-   */
-  useEffect(() => {
-    if (!wavesurferRef.current || !audioUrl) return;
-
-    const wavesurfer = wavesurferRef.current;
+  // Función para cargar audio
+  const loadAudio = useCallback(async (url: string) => {
+    if (!wavesurferRef.current) return;
     
-    // Función asíncrona para cargar el audio
-    const loadAudio = async () => {
-      // Detener y limpiar antes de cargar nuevo audio
-      try {
-        if (wavesurfer.isPlaying()) {
-          wavesurfer.pause();
+    const wavesurfer = wavesurferRef.current;
+
+    // Limpiar blob URL anterior
+    if (currentBlobUrlRef.current) {
+      URL.revokeObjectURL(currentBlobUrlRef.current);
+      currentBlobUrlRef.current = null;
+    }
+
+    try {
+      if (wavesurfer.isPlaying()) {
+        wavesurfer.pause();
+      }
+    } catch (e) {}
+
+    // Indicar que estamos cargando
+    isLoadingRef.current = true;
+    setIsReady(false);
+    setError(null);
+
+    try {
+      const isDirectUrl = url.startsWith('blob:') || 
+                         url.startsWith('http:') || 
+                         url.startsWith('https:') ||
+                         url.startsWith('data:');
+      
+      if (isDirectUrl) {
+        await wavesurfer.load(url);
+      } else {
+        const blobUrl = await getAudioFile(url);
+        
+        if (blobUrl) {
+          currentBlobUrlRef.current = blobUrl;
+          await wavesurfer.load(blobUrl);
+        } else {
+          isLoadingRef.current = false;
+          setError('Archivo no encontrado');
+          setIsReady(false);
         }
-        wavesurfer.empty(); // Limpiar el audio actual
-      } catch (error) {
-        // Ignorar errores
+      }
+    } catch (err: any) {
+      console.error('Error loading audio:', err);
+      isLoadingRef.current = false;
+      setError('Error al cargar audio');
+      setIsReady(false);
+    }
+  }, []);
+
+  // Efecto combinado: inicializar WaveSurfer Y cargar audio cuando esté listo
+  useEffect(() => {
+    // Función que intenta inicializar
+    const tryInit = () => {
+      if (isInitializedRef.current) return;
+      if (!waveformRef.current) {
+        // Reintentar en el siguiente frame
+        requestAnimationFrame(tryInit);
+        return;
       }
 
-      setIsReady(false);
-      setError(null); // Limpiar errores previos
-      
-      try {
-        // Determinar si es un ID de IndexedDB o una URL directa
-        const isDirectUrl = audioUrl.startsWith('blob:') || 
-                           audioUrl.startsWith('http:') || 
-                           audioUrl.startsWith('https:') ||
-                           audioUrl.startsWith('data:');
-        
-        if (isDirectUrl) {
-          // Si es una URL directa (como blob: o http:), intentar cargar directamente
-          try {
-            await wavesurfer.load(audioUrl);
-          } catch (error) {
-            const errorMsg = 'Archivo no disponible. Por favor, elimina este track y vuelve a subirlo.';
-            console.error(errorMsg);
-            setError(errorMsg);
-            setIsReady(false);
-          }
-        } else {
-          // Si parece ser un ID, buscar en IndexedDB
-          const blobUrl = await getAudioFile(audioUrl);
-          
-          if (blobUrl) {
-            // Si se encuentra en IndexedDB, cargar desde ahí
-            await wavesurfer.load(blobUrl);
-          } else {
-            const errorMsg = 'Archivo no encontrado. Puede que sea un track antiguo. Elimínalo y vuelve a subirlo.';
-            console.error(errorMsg, 'ID:', audioUrl);
-            setError(errorMsg);
-            setIsReady(false);
-          }
+      isInitializedRef.current = true;
+
+      const wavesurfer = WaveSurfer.create({
+        container: waveformRef.current,
+        waveColor: '#94a3b8',
+        progressColor: '#0ea5e9',
+        cursorColor: '#ef4444',
+        barWidth: 2,
+        barGap: 1,
+        barRadius: 2,
+        height: 100,
+        normalize: true,
+        backend: 'WebAudio',
+      });
+
+      wavesurferRef.current = wavesurfer;
+
+      // Evento cuando WaveSurfer termina de cargar audio
+      wavesurfer.on('ready', () => {
+        if (isLoadingRef.current) {
+          isLoadingRef.current = false;
+          const duration = wavesurfer.getDuration();
+          setPlayerState(prev => ({ ...prev, duration }));
+          setIsReady(true);
+          setError(null);
+          onReadyRef.current?.(duration);
         }
-      } catch (error) {
-        const errorMsg = 'Error al cargar audio';
-        console.error(errorMsg, error);
-        setError(errorMsg);
+      });
+
+      wavesurfer.on('play', () => {
+        setPlayerState(prev => ({ ...prev, isPlaying: true }));
+      });
+
+      wavesurfer.on('pause', () => {
+        setPlayerState(prev => ({ ...prev, isPlaying: false }));
+      });
+
+      wavesurfer.on('timeupdate', (currentTime: number) => {
+        const now = Date.now();
+        if (now - lastTimeUpdateRef.current > THROTTLE_MS) {
+          lastTimeUpdateRef.current = now;
+          setPlayerState(prev => ({ ...prev, currentTime }));
+        }
+      });
+
+      wavesurfer.on('finish', () => {
+        setPlayerState(prev => ({ ...prev, isPlaying: false, currentTime: 0 }));
+      });
+
+      wavesurfer.on('error', (err: any) => {
+        console.error('WaveSurfer error:', err);
+        isLoadingRef.current = false;
+        setError('Error al cargar el audio');
         setIsReady(false);
+      });
+
+      // Si hay una URL de audio, cargarla ahora
+      if (audioUrl) {
+        isLoadingRef.current = true;
+        loadAudio(audioUrl);
+      } else {
+        // Sin audio, marcar como listo
+        setIsReady(true);
       }
+
+      // Cleanup
+      return () => {
+        try {
+          if (wavesurfer.isPlaying()) {
+            wavesurfer.pause();
+          }
+        } catch (e) {}
+        
+        setTimeout(() => {
+          try {
+            wavesurfer.destroy();
+            wavesurferRef.current = null;
+            isInitializedRef.current = false;
+          } catch (e) {}
+        }, 0);
+      };
     };
 
-    loadAudio();
-  }, [audioUrl]);
+    tryInit();
+  }, [audioUrl, loadAudio]);
 
-  /**
-   * Play/Pause
-   */
   const togglePlayPause = useCallback(() => {
     if (!wavesurferRef.current) return;
     wavesurferRef.current.playPause();
   }, []);
 
-  /**
-   * Ir a un tiempo específico (en segundos)
-   */
   const seekTo = useCallback((time: number) => {
     if (!wavesurferRef.current) return;
     const duration = wavesurferRef.current.getDuration();
@@ -187,9 +198,6 @@ export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) 
     }
   }, []);
 
-  /**
-   * Cambiar volumen (0 a 1)
-   */
   const setVolume = useCallback((volume: number) => {
     if (!wavesurferRef.current) return;
     const clampedVolume = Math.max(0, Math.min(1, volume));
@@ -197,9 +205,6 @@ export const useAudioPlayer = ({ audioUrl, onReady }: UseAudioPlayerProps = {}) 
     setPlayerState(prev => ({ ...prev, volume: clampedVolume }));
   }, []);
 
-  /**
-   * Detener reproducción
-   */
   const stop = useCallback(() => {
     if (!wavesurferRef.current) return;
     wavesurferRef.current.stop();

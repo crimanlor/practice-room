@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTracks } from '@/hooks/useTracks';
 import { useMarkers } from '@/hooks/useMarkers';
 import { FileUpload } from '@/components/FileUpload';
 import { TrackList } from '@/components/TrackList';
 import { AudioPlayer } from '@/components/AudioPlayer';
 import { MarkerList } from '@/components/MarkerList';
+import { SongAnalyzer } from '@/components/SongAnalyzer';
 import { LearningPanel, LearningButton } from '@/components/LearningPanel';
 import { Track, Marker, MarkerType } from '@/lib/types';
 import { motion } from 'framer-motion';
@@ -35,10 +36,14 @@ export default function Home() {
   const [showLearningPanel, setShowLearningPanel] = useState(false);
   const [learningExpanded, setLearningExpanded] = useState(false);
 
+  const handleTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
+
   // Callback para obtener la función seek del player
-  const handleSeekAvailable = (seekFunction: (time: number) => void) => {
+  const handleSeekAvailable = useCallback((seekFunction: (time: number) => void) => {
     setSeekFn(() => seekFunction);
-  };
+  }, []);
 
   // Actualizar marcadores cuando cambia el track
   const handleTrackSelect = (id: string) => {
@@ -164,25 +169,39 @@ export default function Home() {
                 >
                   <AudioPlayer
                     track={currentTrack}
-                    onTimeUpdate={setCurrentTime}
+                    onTimeUpdate={handleTimeUpdate}
                     onSeek={handleSeekAvailable}
                   />
                 </motion.div>
 
-                <motion.div
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.4 }}
-                >
-                  <MarkerList
-                    markers={markers}
-                    onDelete={handleDeleteMarker}
-                    onEdit={handleEditMarker}
-                    onSeek={handleSeekTo}
-                    currentTime={currentTime}
-                    onAddMarker={handleAddMarker}
-                  />
-                </motion.div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                  >
+                    <SongAnalyzer
+                      currentTime={currentTime}
+                      isPlaying={currentTrack !== null}
+                    />
+                  </motion.div>
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.4 }}
+                  >
+                    <MarkerList
+                      markers={markers}
+                      onDelete={handleDeleteMarker}
+                      onEdit={handleEditMarker}
+                      onSeek={handleSeekTo}
+                      currentTime={currentTime}
+                      onAddMarker={handleAddMarker}
+                    />
+                  </motion.div>
+
+                </div>
               </>
             ) : (
               <motion.div

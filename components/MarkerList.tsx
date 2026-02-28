@@ -309,8 +309,11 @@ export const MarkerList = ({
                       {formatTime(marker.time)}
                     </button>
                   </div>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
+                    {MARKER_HELP[marker.type]}
+                  </p>
                   {marker.note && (
-                    <p className="text-slate-300 text-sm mt-1">{marker.note}</p>
+                    <p className="text-slate-300 text-sm mt-2 italic">"{marker.note}"</p>
                   )}
                 </div>
                 <div className="flex items-center gap-1">
