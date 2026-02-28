@@ -156,7 +156,7 @@ Con **Context** (ver `PlayerContext.tsx`), cualquier componente dentro del `Play
 | Decisión | Por qué |
 |---|---|
 | Separar `services/` de `hooks/` | Los servicios no conocen React. Los hooks sí. Esto hace los servicios testeables de forma independiente. |
-| `loadIdRef` en `useAudioPlayer` | Evita que una carga de audio antigua sobreescriba una nueva cuando el usuario cambia de track rápidamente (race condition). |
+| Flag `cancelled` local en `useAudioPlayer` | Evita que una carga de audio antigua sobreescriba una nueva cuando el usuario cambia de track rápidamente (race condition). Al vivir como variable local del efecto —no como ref global— es inmune al remontaje de React StrictMode: cada ejecución del efecto tiene su propio flag independiente. |
 | `PlayerContext` para `seekTo` y `currentTime` | `AudioPlayer`, `MarkerList` y `SongAnalyzer` necesitan estos valores. Pasarlos por props requeriría prop drilling a través de `page.tsx`. |
 | `useTrackMarkers` como hook separado | Combina `useMarkers` (estado en memoria) con `useTracks` (persistencia). `page.tsx` no necesita saber cómo funciona internamente. |
 | No usar `alert()`/`confirm()` nativos | Son bloqueantes y tienen estilo del OS, no de la app. Se reemplazaron por modales propios con animaciones. |

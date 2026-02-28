@@ -119,17 +119,32 @@ export function AudioPlayer({ track, onReady, onTimeUpdate, onSeek }: AudioPlaye
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2
-                         bg-slate-700 rounded-lg p-2 shadow-lg"
+                         bg-slate-700 rounded-lg px-3 py-3 shadow-lg"
             >
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(playerState.volume * 100)}
-                onChange={(e) => setVolume(Number(e.target.value) / 100)}
-                aria-label="Volumen"
-                className="w-24 h-1 accent-primary-500 cursor-pointer"
-              />
+              <div className="relative flex items-center w-24 h-4">
+                {/* Track de fondo */}
+                <div className="absolute inset-y-0 my-auto h-1 w-full rounded-full bg-slate-500" />
+                {/* Relleno activo (ancho dinámico según volumen) */}
+                <div
+                  className="absolute inset-y-0 my-auto h-1 rounded-full bg-sky-500 pointer-events-none"
+                  style={{ width: `${Math.round(playerState.volume * 100)}%` }}
+                />
+                {/* Input nativo invisible encima para capturar interacción */}
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(playerState.volume * 100)}
+                  onChange={(e) => setVolume(Number(e.target.value) / 100)}
+                  aria-label="Volumen"
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                />
+                {/* Thumb visible */}
+                <div
+                  className="absolute w-3 h-3 rounded-full bg-white shadow pointer-events-none -translate-x-1/2"
+                  style={{ left: `${Math.round(playerState.volume * 100)}%` }}
+                />
+              </div>
             </motion.div>
           )}
         </div>
